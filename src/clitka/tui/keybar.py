@@ -32,11 +32,14 @@ def render_bar(enabled: frozenset[str] | None = None, open_key: str | None = Non
     """Render the bar; keys not in `enabled` are dimmed, `open_key` is reversed.
 
     `open_key` marks the slot whose drop-down panel is currently showing, which
-    is what turns a passive legend into a real menu bar.
+    is what turns a passive legend into a real menu bar. It is matched
+    case-insensitively, because Textual reports key names as "f1" while the slots
+    are labelled "F1".
     """
+    wanted = (open_key or "").upper()
     cells = []
     for key, label in SLOTS:
-        if key == open_key:
+        if wanted and key == wanted:
             cells.append(f"[reverse]{key} {label}[/reverse]")
         elif enabled is None or key in enabled:
             cells.append(f"[b]{key}[/b] {label}")
@@ -92,6 +95,9 @@ def _self_check() -> None:
     opened = render_bar(open_key="F2")
     assert "[reverse]F2 Profile[/reverse]" in opened, opened
     assert "[b]F1[/b]" in opened, opened
+    # Textual reports "f1", the slots are labelled "F1".
+    assert "[reverse]F1 Help[/reverse]" in render_bar(open_key="f1")
+
     print("[OK] key bar self-check passed")
 
 
