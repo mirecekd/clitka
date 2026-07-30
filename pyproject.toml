@@ -65,11 +65,22 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+# B008: typer.Option(...) as a default is the Typer idiom.
 ignore = ["B008"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Textual declares BINDINGS / CSS as plain class attributes by design.
+extend-immutable-calls = ["textual.binding.Binding"]
+
+[tool.ruff.lint.per-file-ignores]
+# RUF012: Textual's BINDINGS contract is a plain mutable class attribute.
+"src/clitka/tui/*.py" = ["RUF012"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 
 [tool.mypy]
