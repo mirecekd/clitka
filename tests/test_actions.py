@@ -28,7 +28,7 @@ def ctx(monkeypatch):
 
 @pytest.fixture
 def listed(monkeypatch):
-    monkeypatch.setattr(cc, "list_resources", lambda *_a, **_kw: RESOURCES)
+    monkeypatch.setattr(cc, "iter_resources", lambda *_a, **_kw: iter(RESOURCES))
 
 
 async def _explorer(app, ctx, pilot):

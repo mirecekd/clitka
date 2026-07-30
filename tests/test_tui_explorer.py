@@ -7,7 +7,7 @@ import pytest
 from clitka.core import cloudcontrol as cc
 from clitka.core.context import Context, Identity
 from clitka.tui.app import ClitkaApp
-from clitka.tui.explorer import COMMON_TYPES, ExplorerScreen
+from clitka.tui.explorer import COMMON_TYPES, MAX_ROWS, PAGE_ROWS, ExplorerScreen
 from clitka.tui.picker import CommandPalette, rank
 from clitka.tui.table import ResourceTable
 
@@ -26,15 +26,25 @@ def ctx(monkeypatch):
 
 @pytest.fixture
 def listed(monkeypatch):
-    """Make cloudcontrol.list_resources return canned data."""
+    """Make cloudcontrol.iter_resources yield canned data."""
     calls = []
 
     def fake(_ctx, type_name, *_a, **_kw):
         calls.append(type_name)
-        return RESOURCES
+        yield from RESOURCES
 
-    monkeypatch.setattr(cc, "list_resources", fake)
+    monkeypatch.setattr(cc, "iter_resources", fake)
     return calls
+
+
+def many(count: int):
+    """A generator factory for `count` synthetic buckets."""
+
+    def fake(_ctx, type_name, *_a, **_kw):
+        for index in range(count):
+            yield cc.Resource(type_name, f"b{index:05d}", {"BucketName": f"b{index:05d}"})
+
+    return fake
 
 
 # --- palette ranking ------------------------------------------------------
@@ -81,8 +91,9 @@ async def test_explorer_shows_the_error_instead_of_swallowing_it(ctx, monkeypatc
     def boom(*_a, **_kw):
         raise cc.AdditionalInputsError("AWS::EC2::Subnet", "Missing property: VpcId")
 
-    monkeypatch.setattr(cc, "list_resources", boom)
+    monkeypatch.setattr(cc, "iter_resources", boom)
     app = ClitkaApp(ctx)
+
     async with app.run_test() as pilot:
         await app.push_screen(ExplorerScreen(ctx, "AWS::EC2::Subnet"))
         await pilot.pause()
@@ -169,3 +180,87 @@ async def test_palette_accepts_a_type_that_is_not_in_the_list(ctx, listed):
         await pilot.pause()
         await app.workers.wait_for_complete()
         assert listed == ["AWS::Custom::Thing"]
+
+
+# --- lazy paging ----------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_page_is_shown_before_the_listing_finishes(ctx, monkeypatch):
+    """The table must fill as pages arrive, not only once everything is in."""
+    monkeypatch.setattr(cc, "iter_resources", many(PAGE_ROWS * 2 + 5))
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
+        await app.push_screen(screen)
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert len(screen.resources) == PAGE_ROWS * 2 + 5
+        assert "205 resources" in screen.title_text
+        assert "loading" not in screen.title_text
+        table = screen.query_one(ResourceTable)
+        assert len(table.model.rows) == PAGE_ROWS * 2 + 5
+
+
+@pytest.mark.asyncio
+async def test_the_first_page_sets_the_columns(ctx, monkeypatch):
+    monkeypatch.setattr(cc, "iter_resources", many(PAGE_ROWS + 1))
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
+        await app.push_screen(screen)
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        columns = screen.query_one(ResourceTable).model.columns
+        assert columns[0] == "identifier"
+        assert "BucketName" in columns
+
+
+@pytest.mark.asyncio
+async def test_listing_stops_at_the_display_limit(ctx, monkeypatch):
+    monkeypatch.setattr(cc, "iter_resources", many(MAX_ROWS + PAGE_ROWS * 3))
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
+        await app.push_screen(screen)
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert len(screen.resources) == MAX_ROWS
+        assert "display limit" in screen.title_text
+
+
+@pytest.mark.asyncio
+async def test_an_empty_type_is_reported_as_zero_not_as_loading(ctx, monkeypatch):
+    monkeypatch.setattr(cc, "iter_resources", many(0))
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
+        await app.push_screen(screen)
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert screen.resources == []
+        assert "0 resources" in screen.title_text
+        assert "loading" not in screen.title_text
+
+
+@pytest.mark.asyncio
+async def test_a_failure_midway_through_still_reaches_the_heading(ctx, monkeypatch):
+    def half_then_boom(_ctx, type_name, *_a, **_kw):
+        for index in range(PAGE_ROWS + 3):
+            yield cc.Resource(type_name, f"b{index}", {})
+        raise RuntimeError("Throttling")
+
+    monkeypatch.setattr(cc, "iter_resources", half_then_boom)
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
+        await app.push_screen(screen)
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "[ERROR]" in screen.title_text
+        assert "Throttling" in screen.title_text

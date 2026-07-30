@@ -14,6 +14,7 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Static
+from textual.worker import get_current_worker
 
 from clitka.core import actions as act
 from clitka.core import cloudcontrol as cc
@@ -46,6 +47,13 @@ COMMON_TYPES: tuple[str, ...] = (
     "AWS::IAM::Role",
 )
 
+# How many resources are handed to the table at a time, and where listing stops.
+# ponytail: a fixed display cap rather than true on-demand paging. Ceiling: a type
+# with more than MAX_ROWS resources is shown truncated (the heading says so).
+# Upgrade path: keep the NextToken and fetch more when the cursor nears the end.
+PAGE_ROWS = 100
+MAX_ROWS = 2000
+
 _EXPLORER_HELP = """\
   /    filter the rows (escape clears the filter)
   s    sort by the current column
@@ -53,8 +61,8 @@ _EXPLORER_HELP = """\
   F2   switch profile - reloads this list against the new one
   F3   switch region  - reloads this list against the new one
   F5   reload the list
-
   F9   actions for the highlighted resource
+
   F10  quit
 
   escape   back to the welcome screen
@@ -108,22 +116,61 @@ class ExplorerScreen(Screen[None]):
     # --- loading ----------------------------------------------------------
 
     def reload(self) -> None:
+        self.resources = []
         self._title(f"{self.type_name} - loading...")
         self.run_worker(self._load, thread=True, exclusive=True)
 
     def _load(self) -> None:
+        """Page through the type, handing each page to the table as it arrives.
+
+        A busy account can hold thousands of resources, and waiting for all of
+        them before showing anything makes the explorer feel broken. `MAX_ROWS`
+        is a stop, not a page size.
+        """
+        worker = get_current_worker()
+        page: list[cc.Resource] = []
         try:
-            found = cc.list_resources(self.context, self.type_name, limit=500)
+            for resource in cc.iter_resources(self.context, self.type_name):
+                if worker.is_cancelled:
+                    return
+                page.append(resource)
+                if len(page) >= PAGE_ROWS:
+                    self.app.call_from_thread(self._page, page)
+                    page = []
+                    if self._reached_limit():
+                        break
         except Exception as exc:  # any failure must reach the user, not the log
             self.app.call_from_thread(self._failed, exc)
             return
-        self.app.call_from_thread(self._loaded, found)
+        if worker.is_cancelled:
+            return
+        self.app.call_from_thread(self._page, page)
+        self.app.call_from_thread(self._done)
 
-    def _loaded(self, found: list[cc.Resource]) -> None:
-        self.resources = found
+    def _reached_limit(self) -> bool:
+        return len(self.resources) >= MAX_ROWS
+
+    def _page(self, found: list[cc.Resource]) -> None:
+        """One page has landed. The first one also decides the columns."""
+        if not found and self.resources:
+            return
         table = self.query_one(ResourceTable)
-        table.set_rows([resource.row() for resource in found], cc.columns_for(found))
-        self._title(f"{self.type_name} - {len(found)} resources")
+        rows = [resource.row() for resource in found]
+        if not self.resources:
+            # ponytail: the columns come from the first page only. Ceiling: a
+            # property that appears exclusively in a later page gets no column.
+            # Upgrade path: recompute columns and rebuild when a new key shows up.
+            self.resources = found
+            table.set_rows(rows, cc.columns_for(found) or ["identifier"])
+        else:
+            self.resources.extend(found)
+            table.add_rows(rows)
+        self._title(f"{self.type_name} - {len(self.resources)} resources, loading...")
+
+    def _done(self) -> None:
+        total = len(self.resources)
+        capped = " (stopped at the display limit)" if total >= MAX_ROWS else ""
+        self._title(f"{self.type_name} - {total} resources{capped}")
 
     def _failed(self, exc: Exception) -> None:
         self.query_one(ResourceTable).set_rows([], columns=["identifier"])
