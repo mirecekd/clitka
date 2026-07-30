@@ -47,6 +47,10 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+# Public name: plugins need this to make an AWS response printable.
+jsonable = _jsonable
+
+
 def _cell(value: Any) -> str:
     if value is None:
         return "-"

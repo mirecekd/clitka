@@ -15,9 +15,12 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Static
 
+from clitka.core import actions as act
 from clitka.core import cloudcontrol as cc
 from clitka.core.context import Context
+from clitka.tui.actionmenu import ActionMenu, ConfirmModal
 from clitka.tui.keybar import KeyBar
+from clitka.tui.resultview import ResultScreen
 from clitka.tui.status import StatusBar
 from clitka.tui.table import ResourceTable
 
@@ -49,6 +52,7 @@ class ExplorerScreen(Screen[None]):
     BINDINGS = [
         Binding("f1", "help", "Help", show=False),
         Binding("f5", "reload", "Refresh", show=False),
+        Binding("f9", "actions", "Actions", show=False),
         Binding("f10", "quit", "Quit", show=False),
         Binding("escape", "back", "Back", show=False),
     ]
@@ -106,6 +110,63 @@ class ExplorerScreen(Screen[None]):
     def selected(self) -> dict[str, Any] | None:
         return self.query_one(ResourceTable).selected_row()
 
+    def selected_ref(self) -> act.ResourceRef | None:
+        row = self.selected()
+        return None if row is None else act.ResourceRef.from_row(self.type_name, row)
+
+    # --- F9 action menu ---------------------------------------------------
+
+    def action_actions(self) -> None:
+        """F9: offer whatever the plugins say applies to the selected row."""
+        ref = self.selected_ref()
+        if ref is None:
+            self._title(f"{self.type_name}\nNothing selected - no actions to offer")
+            return
+        offered = act.available(act.registered(), ref)
+        subject = f"{ref.type_name} {ref.identifier}"
+        self.app.push_screen(ActionMenu(offered, subject), self._chosen)
+
+    def _chosen(self, action: act.Action | None) -> None:
+        ref = self.selected_ref()
+        if action is None or ref is None:
+            return
+        if not action.destructive:
+            self._start(action, ref)
+            return
+        detail = (
+            f"profile: {self.context.profile or '(default)'}  "
+            f"region: {self.context.effective_region}"
+        )
+        self.app.push_screen(
+            ConfirmModal(f"{action.label}: {ref.type_name} '{ref.identifier}'?", detail),
+            lambda ok: self._start(action, ref) if ok else None,
+        )
+
+    def _start(self, action: act.Action, ref: act.ResourceRef) -> None:
+        """Run the action off the UI thread - any of them may call AWS."""
+        self._title(f"{self.type_name}\n{action.label} - running...")
+        self.run_worker(
+            lambda: self._run(action, ref), thread=True, exclusive=False, group="action"
+        )
+
+    def _run(self, action: act.Action, ref: act.ResourceRef) -> None:
+        try:
+            result = action.run(self.context, ref)
+        except Exception as exc:
+            self.app.call_from_thread(self._action_failed, action, exc)
+            return
+        self.app.call_from_thread(self._action_done, result)
+
+    def _action_done(self, result: act.ActionResult) -> None:
+        self.app.push_screen(ResultScreen(self.context, result))
+        if result.reload:
+            self.reload()
+        else:
+            self._title(f"{self.type_name} - {len(self.resources)} resources")
+
+    def _action_failed(self, action: act.Action, exc: Exception) -> None:
+        self._title(f"{self.type_name}\n[ERROR] {action.label}: {exc}")
+
     def action_reload(self) -> None:
         self.reload()
 
@@ -115,5 +176,6 @@ class ExplorerScreen(Screen[None]):
     def action_help(self) -> None:
         self._title(
             f"{self.type_name}\n"
-            "/ filter   s sort the current column   F5 reload   escape back   F10 quit"
+            "/ filter   s sort the current column   F5 reload   F9 actions   "
+            "escape back   F10 quit"
         )

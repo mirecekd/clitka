@@ -38,11 +38,13 @@ Keys
   F2   switch profile   (not implemented yet)
   F3   switch region    (not implemented yet)
   F5   refresh
-  F9   actions for the selected resource (not implemented yet)
+  F9   actions for the selected resource (inside the explorer)
   F10  quit
   q    quit
 
-Inside the explorer: / filters, s sorts the current column, escape goes back.
+Inside the explorer: / filters, s sorts the current column, F9 opens the action
+menu for the highlighted row, escape goes back. Destructive actions always ask
+first, and "no" is the default answer.
 
 The status bar on top always shows which profile, account and region every
 call would use, and says READ-ONLY when mutating operations are refused.
