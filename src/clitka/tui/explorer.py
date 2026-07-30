@@ -50,7 +50,10 @@ _EXPLORER_HELP = """\
   /    filter the rows (escape clears the filter)
   s    sort by the current column
   F1   this help (F1 or escape closes it)
+  F2   switch profile - reloads this list against the new one
+  F3   switch region  - reloads this list against the new one
   F5   reload the list
+
   F9   actions for the highlighted resource
   F10  quit
 
@@ -67,6 +70,10 @@ class ExplorerScreen(Screen[None]):
 
     BINDINGS = [
         Binding("f1", "help", "Help", show=False),
+        # F2/F3 are the app's, but a Screen shadows the App's bindings, so they
+        # have to be forwarded explicitly or they would be dead inside here.
+        Binding("f2", "app.switch_profile", "Profile", show=False),
+        Binding("f3", "app.switch_region", "Region", show=False),
         Binding("f5", "reload", "Refresh", show=False),
         Binding("f9", "actions", "Actions", show=False),
         Binding("f10", "quit", "Quit", show=False),
@@ -90,6 +97,12 @@ class ExplorerScreen(Screen[None]):
         yield StatusBar(self.context)
 
     def on_mount(self) -> None:
+        self.reload()
+
+    def adopt_context(self, context: Context) -> None:
+        """The app switched profile or region (F2/F3) - re-list against the new one."""
+        self.context = context
+        self.query_one(StatusBar).set_context(context)
         self.reload()
 
     # --- loading ----------------------------------------------------------
