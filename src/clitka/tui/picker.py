@@ -70,6 +70,16 @@ class CommandPalette(ModalScreen[str | None]):
         self._refill("")
         self.query_one(Input).focus()
 
+    def set_candidates(self, candidates: Sequence[str]) -> None:
+        """Replace the candidate list, keeping whatever the user already typed.
+
+        The caller fetches the real list (ListTypes) on a worker, so the palette
+        can open immediately with a fallback and be refilled a second later.
+        """
+        self.candidates = list(candidates)
+        if self.is_mounted:
+            self._refill(self.query_one(Input).value)
+
     def _refill(self, needle: str) -> None:
         listing = self.query_one(ListView)
         listing.clear()

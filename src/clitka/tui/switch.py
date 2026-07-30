@@ -1,4 +1,5 @@
-"""What the F2 (profile) and F3 (region) drop-down panels are filled with.
+"""What the F2 (profile), F3 (region) and `:` (type) choosers are filled with.
+
 
 The list building is plain functions over already-loaded data so it can be tested
 without a screen and without AWS.
@@ -13,7 +14,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from clitka.core import cloudcontrol
 from clitka.core.awsconfig import AwsConfig
+from clitka.core.context import Context
 from clitka.tui.dropdown import MenuItem
 
 PROFILE_TITLE = "F2  Switch profile - this session only"
@@ -37,6 +40,50 @@ def profile_items(config: AwsConfig, current: str | None) -> list[MenuItem]:
 def region_items(names: Sequence[str], current: str | None) -> list[MenuItem]:
     """One row per region. The active one is marked and the cursor starts there."""
     return [MenuItem(label=name, value=name, current=name == current) for name in sorted(names)]
+
+
+# --- resource types for the `:` palette -----------------------------------
+
+# ListTypes returns ~1200 names and takes several seconds over many pages, so the
+# answer is kept for the life of the process, keyed by profile+region.
+# ponytail: an unbounded process-lifetime dict. Ceiling: a type registered while
+# CLITKA is running is not seen until restart, and the cache is not shared between
+# runs. Upgrade path: a TTL, or a file under ~/.cache/clitka.
+_TYPE_CACHE: dict[tuple[str | None, str | None], tuple[str, ...]] = {}
+
+
+def type_names(ctx: Context, fallback: Sequence[str]) -> tuple[str, ...]:
+    """Every listable resource type name, or `fallback` if AWS will not say.
+
+    `cloudformation:ListTypes` is denied to plenty of real-world roles, and a
+    palette that refuses to open would be worse than a short hard-coded list.
+    """
+    try:
+        # `effective_region` builds a boto3 session, which raises for a profile
+        # that is not in ~/.aws/config - so even the cache key is not safe.
+        key = (ctx.profile, ctx.effective_region)
+    except Exception:
+        return tuple(fallback)
+    cached = _TYPE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        rows = cloudcontrol.list_types(ctx)
+        names = tuple(str(row["type_name"]) for row in rows if row.get("type_name"))
+    except Exception:
+        # Denied, throttled, offline - the palette still has to open.
+        names = ()
+
+    resolved = names or tuple(fallback)
+    if names:
+        # Only a real answer is worth caching; a failure should be retried.
+        _TYPE_CACHE[key] = resolved
+    return resolved
+
+
+def forget_types() -> None:
+    """Drop the type cache - used by the tests, and after a F5 refresh."""
+    _TYPE_CACHE.clear()
 
 
 def _self_check() -> None:
@@ -64,6 +111,12 @@ def _self_check() -> None:
     assert [r.value for r in regions] == ["eu-central-1", "us-east-1"]
     assert regions[0].current is True
     assert region_items([], None) == []
+
+    # type_names must fall back rather than fail when ListTypes is unavailable.
+    forget_types()
+    broken = Context(profile="does-not-exist-anywhere")
+    assert type_names(broken, ("AWS::S3::Bucket",)) == ("AWS::S3::Bucket",)
+    assert not _TYPE_CACHE, "a failed lookup must not be cached"
     print("[OK] switch self-check passed")
 
 

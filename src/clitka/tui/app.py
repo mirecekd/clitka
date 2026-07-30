@@ -30,6 +30,7 @@ from clitka.tui.switch import (
     REGION_TITLE,
     profile_items,
     region_items,
+    type_names,
 )
 
 _WELCOME = """\
@@ -125,8 +126,21 @@ class ClitkaApp(App[None]):
         self.push_screen(TextDrop("F1  Help", _HELP, toggle_key="f1"))
 
     def action_palette(self) -> None:
-        """`:` - choose a resource type and open the explorer for it."""
-        self.push_screen(CommandPalette(COMMON_TYPES), self.open_type)
+        """`:` - choose a resource type and open the explorer for it.
+
+        The candidate list comes from `cloudformation:ListTypes`, which is a
+        multi-page call, so it is fetched on a worker; the palette opens at once
+        with the fallback list and is refilled when the real answer lands.
+        """
+        palette = CommandPalette(COMMON_TYPES)
+        self.push_screen(palette, self.open_type)
+        self.run_worker(
+            lambda: self._load_types(palette), thread=True, exclusive=False, group="types"
+        )
+
+    def _load_types(self, palette: CommandPalette) -> None:
+        found = type_names(self.context, COMMON_TYPES)
+        self.call_from_thread(palette.set_candidates, list(found))
 
     def open_type(self, type_name: str | None) -> None:
         if type_name:
