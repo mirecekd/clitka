@@ -14,20 +14,26 @@ from textual.containers import Container
 from textual.widgets import Static
 
 from clitka.core.context import Context
+from clitka.tui.explorer import COMMON_TYPES, ExplorerScreen
 from clitka.tui.keybar import KeyBar
+from clitka.tui.picker import CommandPalette
 from clitka.tui.status import StatusBar
 
 _WELCOME = """\
 CLITKA - CLI ToolKit for AWS
 
-The resource explorer is not wired up yet (M2 in progress).
-For now:  F1 help   F5 refresh identity   F10 quit
-Everything already works from the CLI - try `clitka --help`.
+  :    open a resource type (Cloud Control explorer)
+  F1   help
+  F5   refresh identity
+  F10  quit
+
+Every screen has a scriptable CLI equivalent - try `clitka resources --help`.
 """
 
 _HELP = """\
 Keys
 
+  :    command palette - pick a resource type to explore
   F1   this help
   F2   switch profile   (not implemented yet)
   F3   switch region    (not implemented yet)
@@ -35,6 +41,8 @@ Keys
   F9   actions for the selected resource (not implemented yet)
   F10  quit
   q    quit
+
+Inside the explorer: / filters, s sorts the current column, escape goes back.
 
 The status bar on top always shows which profile, account and region every
 call would use, and says READ-ONLY when mutating operations are refused.
@@ -51,6 +59,7 @@ class ClitkaApp(App[None]):
     }
     """
     BINDINGS = [
+        Binding("colon", "palette", "Command palette", show=False),
         Binding("f1", "help", "Help", show=False),
         Binding("f5", "refresh", "Refresh", show=False),
         Binding("f10", "quit", "Quit", show=False),
@@ -105,6 +114,14 @@ class ClitkaApp(App[None]):
         if self._showing_help:
             self._showing_help = False
             self.query_one("#content", Static).update(_WELCOME)
+
+    def action_palette(self) -> None:
+        """`:` - choose a resource type and open the explorer for it."""
+        self.push_screen(CommandPalette(COMMON_TYPES), self.open_type)
+
+    def open_type(self, type_name: str | None) -> None:
+        if type_name:
+            self.push_screen(ExplorerScreen(self.context, type_name))
 
 
 def run(context: Context | None = None) -> None:

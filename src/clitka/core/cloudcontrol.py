@@ -112,7 +112,7 @@ def iter_resources(
     while True:
         if token:
             kwargs["NextToken"] = token
-        page = _list_page(client, type_name, kwargs)
+        page = _list_page(ctx, client, type_name, kwargs)
         for description in page.get("ResourceDescriptions", []):
             yield Resource(
                 type_name=type_name,
@@ -125,7 +125,12 @@ def iter_resources(
 
 
 @wrap_aws_errors
-def _list_page(client: Any, type_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
+def _list_page(
+    ctx: Context,  # first, so wrap_aws_errors can name the profile and region
+    client: Any,
+    type_name: str,
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
     try:
         return client.list_resources(**kwargs)
     except client.exceptions.ClientError as exc:

@@ -27,19 +27,29 @@ invoke, deploy, tail, exec, upload, execute.
 
 ## Status
 
-**Pre-alpha, under active development.** Auth and context work; the TUI and the
-service modules are being built milestone by milestone.
+**Pre-alpha, under active development.** Auth, context, the TUI shell and the
+generic resource explorer work; the per-service modules are being built milestone
+by milestone.
 
 What works today:
 
 ```bash
+clitka                               # TUI: `:` opens a resource type, F1 help, F10 quit
 clitka ctx show                      # profile, region, account, identity
 clitka ctx profiles                  # profiles with their sso-session and role
 clitka ctx use myprofile             # remember a profile (and its region)
 clitka auth status                   # per sso-session token expiry
 clitka auth login -p myprofile       # IAM Identity Center device flow
 clitka auth logout --all
+clitka resources types                        # every CFN resource type here
+clitka resources list AWS::S3::Bucket         # any type, via Cloud Control API
+clitka resources get AWS::S3::Bucket my-bkt
+clitka resources delete AWS::S3::Bucket my-bkt
 ```
+
+In the TUI: `:` command palette, `/` filters the table, `s` sorts the current
+column, `F5` reloads, `escape` goes back, `F10` quits. The status bar always
+names the profile, account and region a call would use.
 
 Configuration precedence is `--profile/--region` flag, then `AWS_PROFILE` /
 `AWS_REGION`, then `~/.config/clitka/config.toml`, then the AWS defaults.
@@ -50,7 +60,7 @@ is written to `~/.aws/sso/cache` in the exact `aws` CLI v2 layout, so
 Roadmap, in order:
 
 1. Auth and context - profiles, IAM Identity Center login, region switching (done)
-2. TUI shell and the generic resources explorer (Cloud Control API)
+2. TUI shell and the generic resources explorer (Cloud Control API) (done)
 3. CloudWatch Logs, including live tail
 4. Lambda, ECS exec, EC2 SSM, ECR, API Gateway invoke, Systems Manager
 5. S3 browser and DynamoDB

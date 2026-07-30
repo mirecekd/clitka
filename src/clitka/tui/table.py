@@ -51,6 +51,16 @@ class ResourceTable(Vertical):
         super().__init__()
         self.model = TableModel(columns=list(columns or []))
 
+    def check_action(self, action: str, _parameters: tuple[object, ...]) -> bool | None:
+        """Only claim `escape` while a filter is actually active.
+
+        Otherwise the table would swallow escape and the enclosing screen could
+        never use it to go back.
+        """
+        if action == "clear_filter":
+            return bool(self.model.filter_text) or self.query_one(Input).has_class("visible")
+        return True
+
     def compose(self) -> ComposeResult:
         yield Input(placeholder="filter...", classes="filter")
         yield Static("", classes="count")
