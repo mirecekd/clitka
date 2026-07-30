@@ -1,4 +1,5 @@
-"""The top status bar: who am I, where am I, and is this read-only.
+"""The bottom status bar: who am I, where am I, and is this read-only.
+
 
 The identity comes from STS, which is a network call, so the bar renders
 immediately with what the Context already knows and is refreshed by the app once
@@ -30,7 +31,8 @@ class StatusBar(Static):
 
     DEFAULT_CSS = """
     StatusBar {
-        dock: top;
+        dock: bottom;
+
         height: 1;
         background: $primary;
         color: $text;

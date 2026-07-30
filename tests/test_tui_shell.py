@@ -43,6 +43,17 @@ def test_key_bar_slots_are_fixed_and_dimmable():
     assert "[dim]F2 Profile[/dim]" in render_bar(frozenset({"F1", "F10"}))
 
 
+def test_key_bar_highlights_the_open_panel():
+    opened = render_bar(open_key="F2")
+    assert "[reverse]F2 Profile[/reverse]" in opened
+    assert "[b]F3[/b] Region" in opened
+    bar = KeyBar()
+    bar.set_open("F1")
+    assert "[reverse]F1 Help[/reverse]" in bar.line()
+    bar.set_open(None)
+    assert "[b]F1[/b] Help" in bar.line()
+
+
 @pytest.mark.asyncio
 async def test_app_shows_context_in_the_status_bar(offline_context):
     app = ClitkaApp(offline_context)

@@ -65,13 +65,13 @@ class ExplorerScreen(Screen[None]):
         self.title_text = f"{type_name} - loading..."
 
     def compose(self) -> ComposeResult:
-        yield StatusBar(self.context)
+        yield KeyBar()
         yield Vertical(
             Static(f"{self.type_name} - loading...", id="explorer-title"),
             ResourceTable(),
             id="explorer-body",
         )
-        yield KeyBar()
+        yield StatusBar(self.context)
 
     def on_mount(self) -> None:
         self.reload()

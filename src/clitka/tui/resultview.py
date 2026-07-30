@@ -43,11 +43,11 @@ class ResultScreen(Screen[None]):
         self.result = result
 
     def compose(self) -> ComposeResult:
-        yield StatusBar(self.context)
+        yield KeyBar()
         yield Static(self.heading(), id="result-title")
         with VerticalScroll(id="result-body"):
             yield Static(self.result.body or "(no output)")
-        yield KeyBar()
+        yield StatusBar(self.context)
 
     def heading(self) -> str:
         return f"{self.result.title}  (escape to go back)"

@@ -1,9 +1,11 @@
 """The CLITKA Textual application shell.
 
-Layout (owner's request): status bar on top, fixed F-key bar at the bottom,
-content in between. Nothing here talks to AWS on the UI thread - the identity
-lookup runs in a thread worker so the app paints instantly even when the SSO
-token has expired.
+Layout (owner's request, revised 2026-07-30): the fixed F-key menu bar on top,
+the status bar at the bottom, content in between. The menu is on top so the
+F1/F2/F3 drop-down panels slide out from directly under the key that was pressed.
+
+Nothing here talks to AWS on the UI thread - the identity lookup runs in a thread
+worker so the app paints instantly even when the SSO token has expired.
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ Inside the explorer: / filters, s sorts the current column, F9 opens the action
 menu for the highlighted row, escape goes back. Destructive actions always ask
 first, and "no" is the default answer.
 
-The status bar on top always shows which profile, account and region every
+The status bar at the bottom always shows which profile, account and region every
 call would use, and says READ-ONLY when mutating operations are refused.
 """
 
@@ -75,9 +77,9 @@ class ClitkaApp(App[None]):
         self._showing_help = False
 
     def compose(self) -> ComposeResult:
-        yield StatusBar(self.context)
-        yield Container(Static(_WELCOME, id="content"), id="body")
         yield KeyBar()
+        yield Container(Static(_WELCOME, id="content"), id="body")
+        yield StatusBar(self.context)
 
     def on_mount(self) -> None:
         self.refresh_identity()
