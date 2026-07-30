@@ -66,6 +66,20 @@ def _operation_name(exc: ClientError) -> str:
     return str(exc.operation_name or "AWS call")
 
 
+def _where(args: tuple[Any, ...]) -> tuple[str | None, str | None]:
+    """Find the profile/region to blame, if a Context was passed in.
+
+    Duck-typed on purpose: importing Context here would be circular.
+    """
+    for arg in args[:2]:
+        if hasattr(arg, "profile") and hasattr(arg, "effective_region"):
+            try:
+                return arg.profile, arg.effective_region
+            except Exception:
+                return getattr(arg, "profile", None), None
+    return None, None
+
+
 def wrap_aws_errors(func: F) -> F:
     """Translate botocore exceptions into CLITKA errors.
 
@@ -80,11 +94,13 @@ def wrap_aws_errors(func: F) -> F:
         except ClientError as exc:
             err = exc.response.get("Error", {})
             meta = exc.response.get("ResponseMetadata", {})
+            profile, region = _where(args)
             raise AwsError(
                 operation=_operation_name(exc),
                 code=str(err.get("Code", "ClientError")),
                 message=str(err.get("Message", str(exc))),
-                region=meta.get("HTTPHeaders", {}).get("x-amz-region"),
+                profile=profile,
+                region=region or meta.get("HTTPHeaders", {}).get("x-amz-region"),
             ) from exc
         except ProfileNotFound as exc:
             raise ConfigError(str(exc)) from exc
