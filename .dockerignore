@@ -1,0 +1,27 @@
+x # Local only - never publish
+memory-bank/
+zadani.txt
+
+# VCS and CI
+.git/
+.github/
+
+# Python artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editors
+.vscode/
+.idea/
