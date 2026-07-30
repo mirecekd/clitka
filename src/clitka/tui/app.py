@@ -17,11 +17,13 @@ from textual.widgets import Static
 
 from clitka.core.awsconfig import load_aws_config
 from clitka.core.context import Context
+from clitka.tui.apptext import HELP, WELCOME
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.dropmenu import DropMenu
 from clitka.tui.explorer import COMMON_TYPES, ExplorerScreen
 from clitka.tui.keybar import KeyBar
 from clitka.tui.picker import CommandPalette
+from clitka.tui.restypes import START_TYPE
 from clitka.tui.status import StatusBar
 from clitka.tui.switch import (
     PROFILE_HINT,
@@ -32,36 +34,6 @@ from clitka.tui.switch import (
     region_items,
     type_names,
 )
-
-_WELCOME = """\
-CLITKA - CLI ToolKit for AWS
-
-  :    open a resource type (Cloud Control explorer)
-  F1   help
-  F5   refresh identity
-  F10  quit
-
-Every screen has a scriptable CLI equivalent - try `clitka resources --help`.
-"""
-
-_HELP = """\
-  :    command palette - pick a resource type to explore
-  F1   this help (F1 or escape closes it)
-  F2   switch profile - for this session only
-  F3   switch region  - for this session only
-  F5   refresh
-
-  F9   actions for the selected resource (inside the explorer)
-  F10  quit
-  q    quit
-
-Inside the explorer: / filters, s sorts the current column, F9 opens the action
-menu for the highlighted row, escape goes back. Destructive actions always ask
-first, and "no" is the default answer.
-
-The status bar at the bottom always shows which profile, account and region every
-call would use, and says READ-ONLY when mutating operations are refused.
-"""
 
 
 class ClitkaApp(App[None]):
@@ -83,17 +55,31 @@ class ClitkaApp(App[None]):
         Binding("q", "quit", "Quit", show=False),
     ]
 
-    def __init__(self, context: Context | None = None) -> None:
+    def __init__(
+        self,
+        context: Context | None = None,
+        start_type: str | None = START_TYPE,
+    ) -> None:
         super().__init__()
         self.context = context or Context.from_env()
+        # Which type the explorer opens on. `None` stays on the welcome text -
+        # only the tests that are about the shell itself pass that.
+        self.start_type = start_type
 
     def compose(self) -> ComposeResult:
         yield KeyBar()
-        yield Container(Static(_WELCOME, id="content"), id="body")
+        yield Container(Static(WELCOME, id="content"), id="body")
+
         yield StatusBar(self.context)
 
     def on_mount(self) -> None:
+        """Resolve the identity and go straight into the explorer.
+
+        The welcome text behind it is only what `escape` falls back to - CLITKA
+        opens on real data, not on a splash screen.
+        """
         self.refresh_identity()
+        self.open_type(self.start_type)
 
     # --- identity ---------------------------------------------------------
 
@@ -123,7 +109,7 @@ class ClitkaApp(App[None]):
 
     def action_help(self) -> None:
         """F1: drop the key reference out from under the menu bar."""
-        self.push_screen(TextDrop("F1  Help", _HELP, toggle_key="f1"))
+        self.push_screen(TextDrop("F1  Help", HELP, toggle_key="f1"))
 
     def action_palette(self) -> None:
         """`:` - choose a resource type and open the explorer for it.

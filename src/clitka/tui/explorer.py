@@ -122,6 +122,9 @@ class ExplorerScreen(ActionHost, Screen[None]):
             # Upgrade path: recompute columns and rebuild when a new key shows up.
             self.resources = found
             table.set_rows(rows, cc.columns_for(found) or ["identifier"])
+            # The first page is the moment the screen becomes usable, so hand the
+            # keyboard to the rows right away.
+            table.focus_table()
         else:
             self.resources.extend(found)
             table.add_rows(rows)

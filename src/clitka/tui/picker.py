@@ -74,11 +74,23 @@ class CommandPalette(ModalScreen[str | None]):
         """Replace the candidate list, keeping whatever the user already typed.
 
         The caller fetches the real list (ListTypes) on a worker, so the palette
-        can open immediately with a fallback and be refilled a second later.
+        can open immediately with a fallback and be refilled a second later. By
+        then the user may well have picked something and closed the palette, so
+        the widgets are looked up defensively: `is_mounted` alone is not enough,
+        a dismissed screen still reports True while its children are gone.
         """
         self.candidates = list(candidates)
-        if self.is_mounted:
-            self._refill(self.query_one(Input).value)
+        box = self._live_input()
+        if box is None:
+            return
+        self._refill(box.value)
+
+    def _live_input(self) -> Input | None:
+        """The filter box, or None once this screen has been dismissed."""
+        try:
+            return self.query_one(Input)
+        except Exception:
+            return None
 
     def _refill(self, needle: str) -> None:
         listing = self.query_one(ListView)

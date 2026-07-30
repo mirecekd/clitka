@@ -28,7 +28,16 @@ COMMON_TYPES: tuple[str, ...] = (
     "AWS::IAM::Role",
 )
 
+# What the app opens on. CLITKA lands on real data rather than a splash screen,
+# and S3 buckets are the one type nearly every account has and that lists without
+# a parent identifier.
+# ponytail: a constant, not a setting. Ceiling: an account with no S3 access sees
+# an error on the first screen (and `:` still works). Upgrade path: remember the
+# last type used in ~/.config/clitka/config.toml.
+START_TYPE = "AWS::S3::Bucket"
+
 # How many resources are handed to the table at a time, and where listing stops.
+
 # ponytail: a fixed display cap rather than true on-demand paging. Ceiling: a type
 # with more than MAX_ROWS resources is shown truncated (the heading says so).
 # Upgrade path: keep the NextToken and fetch more when the cursor nears the end.
@@ -36,8 +45,16 @@ PAGE_ROWS = 100
 MAX_ROWS = 2000
 
 EXPLORER_HELP = """\
-  /    filter the rows (escape clears the filter)
-  s    sort by the current column
+Moving around
+
+  up/down          one row            page up/down   a screenful
+  ctrl+home/end    first / last row
+
+Doing things
+
+  /    filter - matches every row loaded so far (escape clears it)
+  s    sort by the current column (again reverses it)
+  :    open a different resource type
   F1   this help (F1 or escape closes it)
   F2   switch profile - reloads this list against the new one
   F3   switch region  - reloads this list against the new one
@@ -45,11 +62,12 @@ EXPLORER_HELP = """\
   F9   actions for the highlighted resource
   F10  quit
 
-  escape   back to the welcome screen
+  escape   back
 
-Destructive actions always ask first, and "no" is the default answer. Columns are
-derived from the properties Cloud Control actually returned for this type, so
-they differ from type to type.
+Resources arrive page by page and the list stays usable while they load - the
+heading says "loading..." until the last page is in. Destructive actions always
+ask first, and "no" is the default answer. Columns are derived from the properties
+Cloud Control actually returned for this type, so they differ from type to type.
 """
 
 
@@ -58,7 +76,9 @@ def _self_check() -> None:
     assert all(name.startswith("AWS::") for name in COMMON_TYPES)
     assert len(set(COMMON_TYPES)) == len(COMMON_TYPES), "duplicate type"
     assert 0 < PAGE_ROWS < MAX_ROWS
+    assert START_TYPE in COMMON_TYPES, "the start type must survive a ListTypes denial"
     assert "F9" in EXPLORER_HELP
+    assert "page up/down" in EXPLORER_HELP, "the paging keys must be documented"
     print("[OK] resource types self-check passed")
 
 

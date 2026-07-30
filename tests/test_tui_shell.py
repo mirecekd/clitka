@@ -57,7 +57,7 @@ def test_key_bar_highlights_the_open_panel():
 
 @pytest.mark.asyncio
 async def test_app_shows_context_in_the_status_bar(offline_context):
-    app = ClitkaApp(offline_context)
+    app = ClitkaApp(offline_context, start_type=None)
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -72,7 +72,7 @@ async def test_app_shows_context_in_the_status_bar(offline_context):
 
 @pytest.mark.asyncio
 async def test_f1_drops_the_help_panel_and_f1_closes_it(offline_context):
-    app = ClitkaApp(offline_context)
+    app = ClitkaApp(offline_context, start_type=None)
     async with app.run_test() as pilot:
         await pilot.press("f1")
         await pilot.pause()
@@ -89,7 +89,7 @@ async def test_f1_drops_the_help_panel_and_f1_closes_it(offline_context):
 
 @pytest.mark.asyncio
 async def test_escape_also_closes_the_help_panel(offline_context):
-    app = ClitkaApp(offline_context)
+    app = ClitkaApp(offline_context, start_type=None)
     async with app.run_test() as pilot:
         await pilot.press("f1")
         await pilot.pause()
@@ -101,7 +101,7 @@ async def test_escape_also_closes_the_help_panel(offline_context):
 
 @pytest.mark.asyncio
 async def test_f10_quits(offline_context):
-    app = ClitkaApp(offline_context)
+    app = ClitkaApp(offline_context, start_type=None)
     async with app.run_test() as pilot:
         await pilot.press("f10")
         await pilot.pause()
@@ -111,7 +111,7 @@ async def test_f10_quits(offline_context):
 @pytest.mark.asyncio
 async def test_unauthenticated_context_does_not_crash_the_bar(monkeypatch):
     monkeypatch.setattr(Context, "identity_or_none", lambda _self: None)
-    app = ClitkaApp(Context(profile="p", region="eu-central-1"))
+    app = ClitkaApp(Context(profile="p", region="eu-central-1"), start_type=None)
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()

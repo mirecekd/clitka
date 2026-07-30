@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from textual.widgets import Static
 
+from clitka import __version__
 from clitka.core.context import Context
 
 
@@ -78,7 +79,7 @@ class StatusBar(Static):
     def line(self) -> str:
         """The rendered text - separated out so it is testable without a screen."""
         parts = [
-            "CLITKA",
+            f"CLITKA {__version__}",
             f"profile: {self.profile}",
             f"acct: {self.account}",
             f"region: {self.aws_region}",
@@ -100,7 +101,9 @@ def _self_check() -> None:
     bar = StatusBar(Context(profile="p", region="eu-central-1", read_only=True))
     bar.set_identity("123456789012", "mirek")
     line = bar.line()
+    assert line.startswith(f"CLITKA {__version__}"), line
     assert "profile: p" in line, line
+
     assert "region: eu-central-1" in line, line
     assert "1234-5678-9012" in line, line
     assert "as: mirek" in line, line

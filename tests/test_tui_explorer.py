@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import pytest
+from textual.widgets import DataTable
 
 from clitka.core import cloudcontrol as cc
 from clitka.core.context import Context, Identity
 from clitka.tui.app import ClitkaApp
 from clitka.tui.explorer import COMMON_TYPES, MAX_ROWS, PAGE_ROWS, ExplorerScreen
 from clitka.tui.picker import CommandPalette, rank
+from clitka.tui.restypes import START_TYPE
 from clitka.tui.table import ResourceTable
 
 RESOURCES = [
@@ -72,7 +74,7 @@ def test_common_types_are_sane():
 
 @pytest.mark.asyncio
 async def test_explorer_loads_resources_into_the_table(ctx, listed):
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         await app.push_screen(ExplorerScreen(ctx, "AWS::S3::Bucket"))
         await pilot.pause()
@@ -92,7 +94,7 @@ async def test_explorer_shows_the_error_instead_of_swallowing_it(ctx, monkeypatc
         raise cc.AdditionalInputsError("AWS::EC2::Subnet", "Missing property: VpcId")
 
     monkeypatch.setattr(cc, "iter_resources", boom)
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
 
     async with app.run_test() as pilot:
         await app.push_screen(ExplorerScreen(ctx, "AWS::EC2::Subnet"))
@@ -107,7 +109,7 @@ async def test_explorer_shows_the_error_instead_of_swallowing_it(ctx, monkeypatc
 
 @pytest.mark.asyncio
 async def test_explorer_reload_refetches(ctx, listed):
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         await app.push_screen(ExplorerScreen(ctx, "AWS::S3::Bucket"))
         await pilot.pause()
@@ -120,7 +122,7 @@ async def test_explorer_reload_refetches(ctx, listed):
 
 @pytest.mark.asyncio
 async def test_escape_leaves_the_explorer(ctx, listed):
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         await app.push_screen(ExplorerScreen(ctx, "AWS::S3::Bucket"))
         await pilot.pause()
@@ -136,7 +138,7 @@ async def test_escape_leaves_the_explorer(ctx, listed):
 
 @pytest.mark.asyncio
 async def test_colon_opens_the_palette_and_enter_opens_the_explorer(ctx, listed):
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press(":")
@@ -155,7 +157,7 @@ async def test_colon_opens_the_palette_and_enter_opens_the_explorer(ctx, listed)
 
 @pytest.mark.asyncio
 async def test_palette_escape_opens_nothing(ctx, listed):
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press(":")
@@ -168,7 +170,7 @@ async def test_palette_escape_opens_nothing(ctx, listed):
 
 @pytest.mark.asyncio
 async def test_palette_accepts_a_type_that_is_not_in_the_list(ctx, listed):
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press(":")
@@ -182,6 +184,77 @@ async def test_palette_accepts_a_type_that_is_not_in_the_list(ctx, listed):
         assert listed == ["AWS::Custom::Thing"]
 
 
+# --- opening straight into the explorer -----------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_app_opens_on_the_explorer_not_on_a_splash_screen(ctx, listed):
+    """No argument, no keypress: the first thing seen is real data."""
+    app = ClitkaApp(ctx)  # start_type defaults to START_TYPE
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert isinstance(app.screen, ExplorerScreen)
+        assert app.screen.type_name == START_TYPE
+        assert listed == [START_TYPE]
+
+
+@pytest.mark.asyncio
+async def test_the_rows_have_the_keyboard_as_soon_as_they_arrive(ctx, listed):
+    """Arrows and page up/down are DataTable bindings - they need the focus."""
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert isinstance(app.focused, DataTable)
+
+
+@pytest.mark.asyncio
+async def test_pagedown_and_arrows_move_the_cursor(ctx, monkeypatch):
+    monkeypatch.setattr(cc, "iter_resources", many(PAGE_ROWS + 20))
+    app = ClitkaApp(ctx)
+    async with app.run_test(size=(100, 20)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+        assert table.cursor_row == 0
+
+        await pilot.press("down", "down")
+        await pilot.pause()
+        assert table.cursor_row == 2
+
+        await pilot.press("pagedown")
+        await pilot.pause()
+        moved = table.cursor_row
+        assert moved > 2, "page down must jump further than a single row"
+
+        await pilot.press("pageup")
+        await pilot.pause()
+        assert table.cursor_row < moved
+
+        # Textual binds the jump-to-last-row on ctrl+end, not plain end.
+        await pilot.press("ctrl+end")
+        await pilot.pause()
+        assert table.cursor_row == PAGE_ROWS + 19
+
+
+@pytest.mark.asyncio
+async def test_the_filter_searches_every_loaded_page_not_just_the_first(ctx, monkeypatch):
+    monkeypatch.setattr(cc, "iter_resources", many(PAGE_ROWS * 2))
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        table = app.screen.query_one(ResourceTable)
+        # b00150 only exists in the second page.
+        table.model.filter_text = "b00150"
+        assert [row["identifier"] for row in table.model.visible()] == ["b00150"]
+
+
 # --- lazy paging ----------------------------------------------------------
 
 
@@ -189,7 +262,7 @@ async def test_palette_accepts_a_type_that_is_not_in_the_list(ctx, listed):
 async def test_a_page_is_shown_before_the_listing_finishes(ctx, monkeypatch):
     """The table must fill as pages arrive, not only once everything is in."""
     monkeypatch.setattr(cc, "iter_resources", many(PAGE_ROWS * 2 + 5))
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
         await app.push_screen(screen)
@@ -206,7 +279,7 @@ async def test_a_page_is_shown_before_the_listing_finishes(ctx, monkeypatch):
 @pytest.mark.asyncio
 async def test_the_first_page_sets_the_columns(ctx, monkeypatch):
     monkeypatch.setattr(cc, "iter_resources", many(PAGE_ROWS + 1))
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
         await app.push_screen(screen)
@@ -221,7 +294,7 @@ async def test_the_first_page_sets_the_columns(ctx, monkeypatch):
 @pytest.mark.asyncio
 async def test_listing_stops_at_the_display_limit(ctx, monkeypatch):
     monkeypatch.setattr(cc, "iter_resources", many(MAX_ROWS + PAGE_ROWS * 3))
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
         await app.push_screen(screen)
@@ -235,7 +308,7 @@ async def test_listing_stops_at_the_display_limit(ctx, monkeypatch):
 @pytest.mark.asyncio
 async def test_an_empty_type_is_reported_as_zero_not_as_loading(ctx, monkeypatch):
     monkeypatch.setattr(cc, "iter_resources", many(0))
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
         await app.push_screen(screen)
@@ -255,7 +328,7 @@ async def test_a_failure_midway_through_still_reaches_the_heading(ctx, monkeypat
         raise RuntimeError("Throttling")
 
     monkeypatch.setattr(cc, "iter_resources", half_then_boom)
-    app = ClitkaApp(ctx)
+    app = ClitkaApp(ctx, start_type=None)
     async with app.run_test() as pilot:
         screen = ExplorerScreen(ctx, "AWS::S3::Bucket")
         await app.push_screen(screen)

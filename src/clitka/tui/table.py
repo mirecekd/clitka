@@ -1,5 +1,6 @@
 """The generic resource table: one widget every service screen reuses.
 
+
 Wraps Textual's `DataTable` and adds what CLITKA needs everywhere: a `/` filter
 box, click/keyboard column sorting, a row count line, and a `selected_row()`
 accessor that hands back the original dict (not the rendered strings) so actions
@@ -69,6 +70,16 @@ class ResourceTable(Vertical):
 
     def on_mount(self) -> None:
         self._sync()
+        # The table is what the user came here to drive, so it starts focused:
+        # arrows, page up/down, home and end are DataTable's own bindings and only
+        # work while it has focus.
+        self.focus_table()
+
+    def focus_table(self) -> None:
+        """Put the keyboard on the rows. Safe to call before the first paint."""
+        table = self.query_one(DataTable)
+        if table.is_mounted:
+            table.focus()
 
     # --- data -------------------------------------------------------------
 
@@ -77,9 +88,25 @@ class ResourceTable(Vertical):
         self._sync(rebuild_columns=True)
 
     def add_rows(self, rows: Sequence[Row]) -> None:
-        """Append a further page without losing the cursor position."""
+        """Append a further page, keeping the cursor exactly where it is.
+
+        This deliberately does NOT go through `_sync()`: rebuilding the whole
+        DataTable on every page would reset the cursor under the user's hands and
+        turn a long listing into O(n^2) work. Only the new rows are added.
+
+        ponytail: while a filter or a sort is active the appended page has to go
+        through the model, so that path does fall back to a full rebuild.
+        Ceiling: the cursor jumps in that (rarer) case. Upgrade path: insert into
+        the sorted position instead of rebuilding.
+        """
         self.model.extend(rows)
-        self._sync()
+        if self.model.filter_text or self.model.sort_column:
+            self._sync()
+            return
+        table = self.query_one(DataTable)
+        for row in rows:
+            table.add_row(*(cell_text(row.get(column)) for column in self.model.columns))
+        self.query_one(".count", Static).update(self.model.status())
 
     def selected_row(self) -> Row | None:
         """The original dict for the highlighted row, or None if empty."""
