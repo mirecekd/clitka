@@ -19,62 +19,22 @@ from textual.worker import get_current_worker
 from clitka.core import actions as act
 from clitka.core import cloudcontrol as cc
 from clitka.core.context import Context
-from clitka.tui.actionmenu import ActionMenu, ConfirmModal
+from clitka.tui.actionhost import ActionHost
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import KeyBar
-from clitka.tui.resultview import ResultScreen
+from clitka.tui.restypes import COMMON_TYPES, EXPLORER_HELP, MAX_ROWS, PAGE_ROWS
 from clitka.tui.status import StatusBar
 from clitka.tui.table import ResourceTable
 
-# ponytail: a short starter list of types that list cleanly without a parent
-# identifier, so the explorer is useful before `resources types` is browsable.
-# Ceiling: not exhaustive. Upgrade path: the type picker screen (F2 in explorer)
-# backed by cloudformation:ListTypes.
-COMMON_TYPES: tuple[str, ...] = (
-    "AWS::S3::Bucket",
-    "AWS::Lambda::Function",
-    "AWS::DynamoDB::Table",
-    "AWS::EC2::Instance",
-    "AWS::EC2::VPC",
-    "AWS::ECS::Cluster",
-    "AWS::ECR::Repository",
-    "AWS::CloudFormation::Stack",
-    "AWS::Logs::LogGroup",
-    "AWS::StepFunctions::StateMachine",
-    "AWS::ApiGateway::RestApi",
-    "AWS::SNS::Topic",
-    "AWS::SQS::Queue",
-    "AWS::IAM::Role",
-)
-
-# How many resources are handed to the table at a time, and where listing stops.
-# ponytail: a fixed display cap rather than true on-demand paging. Ceiling: a type
-# with more than MAX_ROWS resources is shown truncated (the heading says so).
-# Upgrade path: keep the NextToken and fetch more when the cursor nears the end.
-PAGE_ROWS = 100
-MAX_ROWS = 2000
-
-_EXPLORER_HELP = """\
-  /    filter the rows (escape clears the filter)
-  s    sort by the current column
-  F1   this help (F1 or escape closes it)
-  F2   switch profile - reloads this list against the new one
-  F3   switch region  - reloads this list against the new one
-  F5   reload the list
-  F9   actions for the highlighted resource
-
-  F10  quit
-
-  escape   back to the welcome screen
-
-Destructive actions always ask first, and "no" is the default answer. Columns are
-derived from the properties Cloud Control actually returned for this type, so
-they differ from type to type.
-"""
+__all__ = ["COMMON_TYPES", "MAX_ROWS", "PAGE_ROWS", "ExplorerScreen"]
 
 
-class ExplorerScreen(Screen[None]):
-    """One resource type at a time, in the generic table."""
+class ExplorerScreen(ActionHost, Screen[None]):
+    """One resource type at a time, in the generic table.
+
+    `ActionHost` supplies the whole F9 flow; this screen only says what a row is
+    (`selected_ref`) and what to do afterwards (`_after_action`).
+    """
 
     BINDINGS = [
         Binding("f1", "help", "Help", show=False),
@@ -190,60 +150,15 @@ class ExplorerScreen(Screen[None]):
         row = self.selected()
         return None if row is None else act.ResourceRef.from_row(self.type_name, row)
 
-    # --- F9 action menu ---------------------------------------------------
-
-    def action_actions(self) -> None:
-        """F9: offer whatever the plugins say applies to the selected row."""
-        ref = self.selected_ref()
-        if ref is None:
-            self._title(f"{self.type_name}\nNothing selected - no actions to offer")
-            return
-        offered = act.available(act.registered(), ref)
-        subject = f"{ref.type_name} {ref.identifier}"
-        self.app.push_screen(ActionMenu(offered, subject), self._chosen)
-
-    def _chosen(self, action: act.Action | None) -> None:
-        ref = self.selected_ref()
-        if action is None or ref is None:
-            return
-        if not action.destructive:
-            self._start(action, ref)
-            return
-        detail = (
-            f"profile: {self.context.profile or '(default)'}  "
-            f"region: {self.context.effective_region}"
-        )
-        self.app.push_screen(
-            ConfirmModal(f"{action.label}: {ref.type_name} '{ref.identifier}'?", detail),
-            lambda ok: self._start(action, ref) if ok else None,
-        )
-
-    def _start(self, action: act.Action, ref: act.ResourceRef) -> None:
-        """Run the action off the UI thread - any of them may call AWS."""
-        self._title(f"{self.type_name}\n{action.label} - running...")
-        self.run_worker(
-            lambda: self._run(action, ref), thread=True, exclusive=False, group="action"
-        )
-
-    def _run(self, action: act.Action, ref: act.ResourceRef) -> None:
-        try:
-            result = action.run(self.context, ref)
-        except Exception as exc:
-            self.app.call_from_thread(self._action_failed, action, exc)
-            return
-        self.app.call_from_thread(self._action_done, result)
-
-    def _action_done(self, result: act.ActionResult) -> None:
-        self.app.push_screen(ResultScreen(self.context, result))
-        if result.reload:
+    def _after_action(self, reload: bool) -> None:
+        """`ActionHost` calls this once an action has finished."""
+        if reload:
             self.reload()
         else:
             self._title(f"{self.type_name} - {len(self.resources)} resources")
 
-    def _action_failed(self, action: act.Action, exc: Exception) -> None:
-        self._title(f"{self.type_name}\n[ERROR] {action.label}: {exc}")
-
     def action_reload(self) -> None:
+
         self.reload()
 
     def action_back(self) -> None:
@@ -251,4 +166,4 @@ class ExplorerScreen(Screen[None]):
 
     def action_help(self) -> None:
         """F1: the same drop-down panel the welcome screen uses."""
-        self.app.push_screen(TextDrop("F1  Help - explorer", _EXPLORER_HELP, "f1"))
+        self.app.push_screen(TextDrop("F1  Help - explorer", EXPLORER_HELP, "f1"))
