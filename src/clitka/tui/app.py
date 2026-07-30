@@ -16,6 +16,7 @@ from textual.containers import Container
 from textual.widgets import Static
 
 from clitka.core.context import Context
+from clitka.tui.dropdown import TextDrop
 from clitka.tui.explorer import COMMON_TYPES, ExplorerScreen
 from clitka.tui.keybar import KeyBar
 from clitka.tui.picker import CommandPalette
@@ -33,10 +34,8 @@ Every screen has a scriptable CLI equivalent - try `clitka resources --help`.
 """
 
 _HELP = """\
-Keys
-
   :    command palette - pick a resource type to explore
-  F1   this help
+  F1   this help (F1 or escape closes it)
   F2   switch profile   (not implemented yet)
   F3   switch region    (not implemented yet)
   F5   refresh
@@ -68,13 +67,11 @@ class ClitkaApp(App[None]):
         Binding("f5", "refresh", "Refresh", show=False),
         Binding("f10", "quit", "Quit", show=False),
         Binding("q", "quit", "Quit", show=False),
-        Binding("escape", "dismiss_help", "Back", show=False),
     ]
 
     def __init__(self, context: Context | None = None) -> None:
         super().__init__()
         self.context = context or Context.from_env()
-        self._showing_help = False
 
     def compose(self) -> ComposeResult:
         yield KeyBar()
@@ -111,13 +108,8 @@ class ClitkaApp(App[None]):
         self.refresh_identity()
 
     def action_help(self) -> None:
-        self._showing_help = True
-        self.query_one("#content", Static).update(_HELP)
-
-    def action_dismiss_help(self) -> None:
-        if self._showing_help:
-            self._showing_help = False
-            self.query_one("#content", Static).update(_WELCOME)
+        """F1: drop the key reference out from under the menu bar."""
+        self.push_screen(TextDrop("F1  Help", _HELP, toggle_key="f1"))
 
     def action_palette(self) -> None:
         """`:` - choose a resource type and open the explorer for it."""

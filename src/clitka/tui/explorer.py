@@ -19,6 +19,7 @@ from clitka.core import actions as act
 from clitka.core import cloudcontrol as cc
 from clitka.core.context import Context
 from clitka.tui.actionmenu import ActionMenu, ConfirmModal
+from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import KeyBar
 from clitka.tui.resultview import ResultScreen
 from clitka.tui.status import StatusBar
@@ -44,6 +45,21 @@ COMMON_TYPES: tuple[str, ...] = (
     "AWS::SQS::Queue",
     "AWS::IAM::Role",
 )
+
+_EXPLORER_HELP = """\
+  /    filter the rows (escape clears the filter)
+  s    sort by the current column
+  F1   this help (F1 or escape closes it)
+  F5   reload the list
+  F9   actions for the highlighted resource
+  F10  quit
+
+  escape   back to the welcome screen
+
+Destructive actions always ask first, and "no" is the default answer. Columns are
+derived from the properties Cloud Control actually returned for this type, so
+they differ from type to type.
+"""
 
 
 class ExplorerScreen(Screen[None]):
@@ -174,8 +190,5 @@ class ExplorerScreen(Screen[None]):
         self.app.pop_screen()
 
     def action_help(self) -> None:
-        self._title(
-            f"{self.type_name}\n"
-            "/ filter   s sort the current column   F5 reload   F9 actions   "
-            "escape back   F10 quit"
-        )
+        """F1: the same drop-down panel the welcome screen uses."""
+        self.app.push_screen(TextDrop("F1  Help - explorer", _EXPLORER_HELP, "f1"))

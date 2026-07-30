@@ -6,6 +6,7 @@ import pytest
 
 from clitka.core.context import Context, Identity
 from clitka.tui.app import ClitkaApp
+from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import SLOTS, KeyBar, render_bar
 from clitka.tui.status import StatusBar, format_account
 
@@ -70,13 +71,32 @@ async def test_app_shows_context_in_the_status_bar(offline_context):
 
 
 @pytest.mark.asyncio
-async def test_f1_toggles_help(offline_context):
+async def test_f1_drops_the_help_panel_and_f1_closes_it(offline_context):
     app = ClitkaApp(offline_context)
     async with app.run_test() as pilot:
         await pilot.press("f1")
-        assert app._showing_help is True
+        await pilot.pause()
+        panel = app.screen
+        assert isinstance(panel, TextDrop)
+        assert "command palette" in panel.body
+        assert "[reverse]F1 Help[/reverse]" in app.query_one(KeyBar).line()
+
+        await pilot.press("f1")
+        await pilot.pause()
+        assert not isinstance(app.screen, TextDrop)
+        assert "[b]F1[/b] Help" in app.query_one(KeyBar).line()
+
+
+@pytest.mark.asyncio
+async def test_escape_also_closes_the_help_panel(offline_context):
+    app = ClitkaApp(offline_context)
+    async with app.run_test() as pilot:
+        await pilot.press("f1")
+        await pilot.pause()
+        assert isinstance(app.screen, TextDrop)
         await pilot.press("escape")
-        assert app._showing_help is False
+        await pilot.pause()
+        assert not isinstance(app.screen, TextDrop)
 
 
 @pytest.mark.asyncio
