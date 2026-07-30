@@ -14,9 +14,11 @@ from typing import Any
 import boto3
 from botocore.config import Config
 
+from clitka.core import clitkaconfig
 from clitka.core.errors import ConfigError, ReadOnlyError, wrap_aws_errors
 
 _USER_AGENT_SUFFIX = "clitka"
+_TRUTHY = ("1", "true", "yes", "on")
 
 
 @dataclass(frozen=True)
@@ -39,16 +41,43 @@ class Context:
     profile: str | None = None
     region: str | None = None
     read_only: bool = False
+    source: dict[str, str] = field(default_factory=dict, repr=False, compare=False)
     _clients: dict[tuple[str, str | None], Any] = field(
         default_factory=dict, repr=False, compare=False
     )
 
     @classmethod
     def from_env(cls, profile: str | None = None, region: str | None = None) -> Context:
+        """Resolve the context. Priority: CLI flag > env var > CLITKA config > AWS default.
+
+        "AWS default" means: leave the value unset and let botocore resolve it,
+        so `~/.aws/config` stays the single source of truth for defaults.
+        """
+        saved = clitkaconfig.load()
+        source: dict[str, str] = {}
+
+        env_profile = os.environ.get("AWS_PROFILE")
+        env_region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+        env_read_only = os.environ.get("CLITKA_READ_ONLY", "").lower() in _TRUTHY
+
+        for key, values in (
+            ("profile", (("flag", profile), ("env", env_profile), ("config", saved.profile))),
+            ("region", (("flag", region), ("env", env_region), ("config", saved.region))),
+        ):
+            source[key] = "aws"
+            for origin, value in values:
+                if value:
+                    source[key] = origin
+                    break
+
+        resolved_profile = profile or env_profile or saved.profile
+        resolved_region = region or env_region or saved.region
+        source["read_only"] = "env" if env_read_only else ("config" if saved.read_only else "aws")
         return cls(
-            profile=profile or os.environ.get("AWS_PROFILE"),
-            region=region or os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION"),
-            read_only=os.environ.get("CLITKA_READ_ONLY", "").lower() in ("1", "true", "yes"),
+            profile=resolved_profile,
+            region=resolved_region,
+            read_only=env_read_only or saved.read_only,
+            source=source,
         )
 
     def with_profile(self, profile: str | None) -> Context:
@@ -120,6 +149,7 @@ class Context:
         ident = self.identity_or_none()
         return {
             "profile": self.profile or "(default)",
+            "profile_from": self.source.get("profile", "aws"),
             "region": self.effective_region or "(unset)",
             "account": ident.account if ident else "(unknown)",
             "identity": ident.display if ident else "(unauthenticated)",

@@ -27,12 +27,29 @@ invoke, deploy, tail, exec, upload, execute.
 
 ## Status
 
-**Pre-alpha, under active development.** The context layer and the CLI skeleton
-work; the TUI and the service modules are being built milestone by milestone.
+**Pre-alpha, under active development.** Auth and context work; the TUI and the
+service modules are being built milestone by milestone.
+
+What works today:
+
+```bash
+clitka ctx show                      # profile, region, account, identity
+clitka ctx profiles                  # profiles with their sso-session and role
+clitka ctx use myprofile             # remember a profile (and its region)
+clitka auth status                   # per sso-session token expiry
+clitka auth login -p myprofile       # IAM Identity Center device flow
+clitka auth logout --all
+```
+
+Configuration precedence is `--profile/--region` flag, then `AWS_PROFILE` /
+`AWS_REGION`, then `~/.config/clitka/config.toml`, then the AWS defaults.
+CLITKA only reads `~/.aws/*`; its own settings go to its own file. The SSO token
+is written to `~/.aws/sso/cache` in the exact `aws` CLI v2 layout, so
+`clitka auth login` and `aws sso login` are interchangeable.
 
 Roadmap, in order:
 
-1. Auth and context - profiles, IAM Identity Center login, region switching
+1. Auth and context - profiles, IAM Identity Center login, region switching (done)
 2. TUI shell and the generic resources explorer (Cloud Control API)
 3. CloudWatch Logs, including live tail
 4. Lambda, ECS exec, EC2 SSM, ECR, API Gateway invoke, Systems Manager

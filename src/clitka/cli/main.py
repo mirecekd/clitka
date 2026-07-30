@@ -5,6 +5,7 @@ from __future__ import annotations
 import typer
 
 from clitka import __version__
+from clitka.cli import auth as auth_cli
 from clitka.cli import ctx as ctx_cli
 from clitka.core.context import Context
 from clitka.core.errors import ClitkaError
@@ -19,6 +20,7 @@ app = typer.Typer(
     no_args_is_help=False,
 )
 app.add_typer(ctx_cli.app, name="ctx")
+app.add_typer(auth_cli.app, name="auth")
 
 for _name, _service_app in service_apps():
     app.add_typer(_service_app, name=_name)
