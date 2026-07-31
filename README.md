@@ -16,9 +16,10 @@ its own flags, config and auth story.
 
 CLITKA is one tool with two faces:
 
-- **TUI** - run `clitka` with no arguments. Keyboard-first: a function-key menu
-  bar on top with drop-down panels, the profile / account / region status bar at
-  the bottom, and `F9` for the context actions of the selected resource.
+- **TUI** - run `clitka` with no arguments and you land on a tree of resource
+  types: open one and its resources unfold underneath, loaded on demand.
+  Keyboard-first, with a function-key menu bar on top, the profile / account /
+  region status bar at the bottom, and `F9` for the actions of what is selected.
 
 - **CLI** - run `clitka <service> <verb>`. Every action available in the TUI is
   also a plain, scriptable command with `--output json|yaml|table`.
@@ -35,7 +36,7 @@ by milestone.
 What works today:
 
 ```bash
-clitka                               # TUI: `:` opens a resource type, F1 help, F10 quit
+clitka                               # TUI: the resource tree, F1 help, F10 quit
 clitka ctx show                      # profile, region, account, identity
 clitka ctx profiles                  # profiles with their sso-session and role
 clitka ctx use myprofile             # remember a profile (and its region)
@@ -48,13 +49,16 @@ clitka resources get AWS::S3::Bucket my-bkt
 clitka resources delete AWS::S3::Bucket my-bkt
 ```
 
-In the TUI: `:` opens the command palette (every resource type the account
-exposes), `/` filters the table, `s` sorts the current column, `F9` opens the
-actions for the highlighted resource, `F5` reloads, `escape` goes back, `F10`
-quits. `F1`, `F2` and `F3` drop a panel out from under the menu bar - help, and
-switching the profile or region **for the running session**; `clitka ctx use` is
-what makes a choice stick. The status bar always names the profile, account and
-region a call would use, and says READ-ONLY when writes are refused.
+In the TUI you land on a tree of the resource types worth looking at. Nothing is
+fetched until you open a branch: `enter` (or `space`) unfolds a type and its
+resources stream in page by page, `enter` again folds it and keeps them. `:` adds
+any other type the account exposes as a further branch, `F9` opens the actions for
+the resource under the cursor, `F5` forgets everything, `F10` quits.
+
+`F1`, `F2` and `F3` drop a panel out from under the menu bar - help, and switching
+the profile or region **for the running session**; `clitka ctx use` is what makes a
+choice stick. The status bar always names the CLITKA build plus the profile,
+account and region a call would use, and says READ-ONLY when writes are refused.
 
 Configuration precedence is `--profile/--region` flag, then `AWS_PROFILE` /
 `AWS_REGION`, then `~/.config/clitka/config.toml`, then the AWS defaults.

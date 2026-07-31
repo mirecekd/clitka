@@ -23,7 +23,8 @@ from clitka.tui.dropmenu import DropMenu
 from clitka.tui.explorer import COMMON_TYPES, ExplorerScreen
 from clitka.tui.keybar import KeyBar
 from clitka.tui.picker import CommandPalette
-from clitka.tui.restypes import START_TYPE
+from clitka.tui.restree import ResourceTree
+from clitka.tui.restypes import TREE_TYPES
 from clitka.tui.status import StatusBar
 from clitka.tui.switch import (
     PROFILE_HINT,
@@ -55,16 +56,13 @@ class ClitkaApp(App[None]):
         Binding("q", "quit", "Quit", show=False),
     ]
 
-    def __init__(
-        self,
-        context: Context | None = None,
-        start_type: str | None = START_TYPE,
-    ) -> None:
+    def __init__(self, context: Context | None = None, open_tree: bool = True) -> None:
         super().__init__()
         self.context = context or Context.from_env()
-        # Which type the explorer opens on. `None` stays on the welcome text -
-        # only the tests that are about the shell itself pass that.
-        self.start_type = start_type
+        # Open on the resource tree. `open_tree=False` stays on the welcome text - only
+        # the tests that are about the shell itself, or a single explorer screen,
+        # pass that.
+        self.open_tree = open_tree
 
     def compose(self) -> ComposeResult:
         yield KeyBar()
@@ -73,13 +71,14 @@ class ClitkaApp(App[None]):
         yield StatusBar(self.context)
 
     def on_mount(self) -> None:
-        """Resolve the identity and go straight into the explorer.
+        """Resolve the identity and open the resource tree.
 
-        The welcome text behind it is only what `escape` falls back to - CLITKA
-        opens on real data, not on a splash screen.
+        The welcome text behind it is only a backdrop - CLITKA opens on the tree
+        of resource types, and nothing is fetched until a branch is expanded.
         """
         self.refresh_identity()
-        self.open_type(self.start_type)
+        if self.open_tree:
+            self.push_screen(ResourceTree(self.context, TREE_TYPES))
 
     # --- identity ---------------------------------------------------------
 
@@ -129,8 +128,18 @@ class ClitkaApp(App[None]):
         self.call_from_thread(palette.set_candidates, list(found))
 
     def open_type(self, type_name: str | None) -> None:
-        if type_name:
-            self.push_screen(ExplorerScreen(self.context, type_name))
+        """What `:` does with the type it was given.
+
+        On the tree it becomes a further branch (and is expanded); anywhere else
+        it opens the flat explorer, which is what the `resources` CLI mirrors.
+        """
+        if not type_name:
+            return
+        for screen in reversed(self.screen_stack):
+            if isinstance(screen, ResourceTree):
+                screen.add_type(type_name)
+                return
+        self.push_screen(ExplorerScreen(self.context, type_name))
 
     # --- F2 / F3: switch profile and region for this session --------------
 

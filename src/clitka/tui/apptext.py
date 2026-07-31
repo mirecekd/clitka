@@ -28,16 +28,18 @@ HELP = """\
   F10  quit
   q    quit
 
-Inside the explorer:
+CLITKA opens on a tree of resource types. Nothing is fetched until you open a
+branch; the resources then appear underneath as they load, and closing the branch
+keeps them. `:` adds any other type as a further branch.
 
-  up/down       move one row          page up/down   move a screenful
-  ctrl+home/end first / last row      /              filter every loaded row
-  s             sort the current column
-  F9            actions for the highlighted row
-  escape        back
+  up/down          move one node      page up/down   move a screenful
+  enter / space    open or close the type under the cursor
+  right / left     open / close without moving
+  ctrl+home/end    first / last node
 
 Resources are loaded page by page and appear as they arrive, so a long listing
 is browsable straight away.
+
 
 Destructive actions always ask first, and "no" is the default answer. The status
 bar at the bottom always shows the CLITKA build plus which profile, account and

@@ -28,13 +28,25 @@ COMMON_TYPES: tuple[str, ...] = (
     "AWS::IAM::Role",
 )
 
-# What the app opens on. CLITKA lands on real data rather than a splash screen,
-# and S3 buckets are the one type nearly every account has and that lists without
-# a parent identifier.
-# ponytail: a constant, not a setting. Ceiling: an account with no S3 access sees
-# an error on the first screen (and `:` still works). Upgrade path: remember the
-# last type used in ~/.config/clitka/config.toml.
-START_TYPE = "AWS::S3::Bucket"
+# The branches the landing tree opens with - the types the owner actually works
+# with, in the order they are most often wanted. Nothing is fetched until a branch
+# is expanded, so the list can afford to be a little generous; anything missing is
+# one `:` away and is then added as a further branch.
+# ponytail: a constant, not a setting. Ceiling: it is the same for every account.
+# Upgrade path: remember the branches in ~/.config/clitka/config.toml.
+TREE_TYPES: tuple[str, ...] = (
+    "AWS::S3::Bucket",
+    "AWS::Lambda::Function",
+    "AWS::DynamoDB::Table",
+    "AWS::Logs::LogGroup",
+    "AWS::EC2::Instance",
+    "AWS::ECS::Cluster",
+    "AWS::ECR::Repository",
+    "AWS::CloudFormation::Stack",
+    "AWS::StepFunctions::StateMachine",
+    "AWS::ApiGateway::RestApi",
+)
+
 
 # How many resources are handed to the table at a time, and where listing stops.
 
@@ -71,14 +83,53 @@ Cloud Control actually returned for this type, so they differ from type to type.
 """
 
 
+TREE_HELP = """\
+The landing screen is a tree of resource types. Nothing is fetched until you open
+a branch, and what is fetched appears while it loads.
+
+Moving around
+
+  up/down          one node           page up/down   a screenful
+  ctrl+home/end    first / last node
+
+Opening and closing
+
+  enter / space    open a type (loads it) or close it again
+  right / left     open / close without moving off the node
+  :                add any other resource type as a new branch
+
+Doing things
+
+  F1   this help (F1 or escape closes it)
+  F2   switch profile - everything loaded is dropped, reopen to refetch
+  F3   switch region  - the same
+  F5   collapse everything and forget it (this is also the retry after an error)
+  F9   actions for the highlighted resource (a type branch has none)
+  F10  quit
+
+A type shows how many resources it holds once loaded: "(98)", "(none)", or
+"(2000+)" when the display limit cut it short. A branch that could not be listed
+keeps the error on it - F5 retries.
+"""
+
+
 def _self_check() -> None:
     assert "AWS::S3::Bucket" in COMMON_TYPES
     assert all(name.startswith("AWS::") for name in COMMON_TYPES)
     assert len(set(COMMON_TYPES)) == len(COMMON_TYPES), "duplicate type"
     assert 0 < PAGE_ROWS < MAX_ROWS
-    assert START_TYPE in COMMON_TYPES, "the start type must survive a ListTypes denial"
+
+    assert all(name.startswith("AWS::") for name in TREE_TYPES)
+    assert len(set(TREE_TYPES)) == len(TREE_TYPES), "duplicate branch"
+    # Every landing branch must also be a palette fallback, so a ListTypes denial
+    # never leaves the user unable to reopen one of them.
+    assert set(TREE_TYPES) <= set(COMMON_TYPES)
+
     assert "F9" in EXPLORER_HELP
     assert "page up/down" in EXPLORER_HELP, "the paging keys must be documented"
+    for text in (EXPLORER_HELP, TREE_HELP):
+        assert text.endswith("\n") and "F10" in text
+    assert "enter / space" in TREE_HELP
     print("[OK] resource types self-check passed")
 
 

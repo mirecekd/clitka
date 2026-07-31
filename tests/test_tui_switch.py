@@ -73,7 +73,7 @@ def test_region_items_are_sorted_with_the_active_one_marked():
 
 @pytest.mark.asyncio
 async def test_f2_drops_the_profile_menu_and_switches_the_context(offline):
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press("f2")
         await pilot.pause()
@@ -95,7 +95,7 @@ async def test_f2_drops_the_profile_menu_and_switches_the_context(offline):
 
 @pytest.mark.asyncio
 async def test_f3_drops_the_region_menu_and_switches_the_context(offline):
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press("f3")
         await pilot.pause()
@@ -112,7 +112,7 @@ async def test_f3_drops_the_region_menu_and_switches_the_context(offline):
 
 @pytest.mark.asyncio
 async def test_escaping_the_profile_menu_changes_nothing(offline):
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press("f2")
         await pilot.pause()
@@ -123,7 +123,7 @@ async def test_escaping_the_profile_menu_changes_nothing(offline):
 
 @pytest.mark.asyncio
 async def test_picking_the_active_profile_again_is_a_no_op(offline):
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         before = app.context
         await pilot.press("f2")
@@ -136,7 +136,7 @@ async def test_picking_the_active_profile_again_is_a_no_op(offline):
 @pytest.mark.asyncio
 async def test_an_empty_profile_list_explains_itself_instead_of_crashing(offline, monkeypatch):
     monkeypatch.setattr(app_module, "load_aws_config", AwsConfig)
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press("f2")
         await pilot.pause()
@@ -154,7 +154,7 @@ async def test_switching_the_profile_does_not_touch_the_saved_config(offline, mo
         raise AssertionError("F2 must not write the CLITKA config")
 
     monkeypatch.setattr(clitkaconfig, "save", boom, raising=False)
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press("f2")
         await pilot.pause()
@@ -234,7 +234,7 @@ async def test_the_palette_is_refilled_from_list_types(offline, monkeypatch):
     monkeypatch.setattr(
         switch.cloudcontrol, "list_types", lambda _ctx: [{"type_name": "AWS::Fancy::Thing"}]
     )
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press(":")
         await pilot.pause()
@@ -254,7 +254,7 @@ async def test_the_palette_still_opens_when_list_types_is_denied(offline, monkey
         raise RuntimeError("AccessDenied")
 
     monkeypatch.setattr(switch.cloudcontrol, "list_types", denied)
-    app = ClitkaApp(offline, start_type=None)
+    app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press(":")
         await pilot.pause()

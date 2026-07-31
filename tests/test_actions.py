@@ -104,7 +104,7 @@ def test_delete_action_asks_cloudcontrol_and_requests_a_reload(monkeypatch, ctx)
 
 @pytest.mark.asyncio
 async def test_f9_opens_the_menu_for_the_selected_row(ctx, listed):
-    app = ClitkaApp(ctx, start_type=None)
+    app = ClitkaApp(ctx, open_tree=False)
     async with app.run_test() as pilot:
         screen = await _explorer(app, ctx, pilot)
         assert screen.selected_ref().identifier == "one"
@@ -118,7 +118,7 @@ async def test_f9_opens_the_menu_for_the_selected_row(ctx, listed):
 @pytest.mark.asyncio
 async def test_a_non_destructive_action_runs_and_shows_its_result(ctx, listed, monkeypatch):
     monkeypatch.setattr(cc, "get_resource", lambda _c, t, i: cc.Resource(t, i, {"BucketName": i}))
-    app = ClitkaApp(ctx, start_type=None)
+    app = ClitkaApp(ctx, open_tree=False)
     async with app.run_test() as pilot:
         await _explorer(app, ctx, pilot)
         await pilot.press("f9")
@@ -135,7 +135,7 @@ async def test_a_non_destructive_action_runs_and_shows_its_result(ctx, listed, m
 async def test_a_destructive_action_confirms_first_and_no_is_the_default(ctx, listed, monkeypatch):
     calls = []
     monkeypatch.setattr(cc, "delete_resource", lambda *a: calls.append(a) or {"status": "X"})
-    app = ClitkaApp(ctx, start_type=None)
+    app = ClitkaApp(ctx, open_tree=False)
     async with app.run_test() as pilot:
         await _explorer(app, ctx, pilot)
         await pilot.press("f9")
@@ -158,7 +158,7 @@ async def test_a_confirmed_destructive_action_runs(ctx, listed, monkeypatch):
         return {"status": "IN_PROGRESS"}
 
     monkeypatch.setattr(cc, "delete_resource", fake)
-    app = ClitkaApp(ctx, start_type=None)
+    app = ClitkaApp(ctx, open_tree=False)
     async with app.run_test() as pilot:
         await _explorer(app, ctx, pilot)
         await pilot.press("f9")
@@ -178,7 +178,7 @@ async def test_a_failing_action_is_reported_in_the_heading(ctx, listed, monkeypa
         raise cc.ClitkaError("AccessDenied: no cloudcontrol:GetResource")
 
     monkeypatch.setattr(cc, "get_resource", boom)
-    app = ClitkaApp(ctx, start_type=None)
+    app = ClitkaApp(ctx, open_tree=False)
     async with app.run_test() as pilot:
         screen = await _explorer(app, ctx, pilot)
         await pilot.press("f9")
@@ -195,7 +195,7 @@ async def test_a_failing_action_is_reported_in_the_heading(ctx, listed, monkeypa
 @pytest.mark.asyncio
 async def test_escape_closes_the_menu_without_running_anything(ctx, listed, monkeypatch):
     monkeypatch.setattr(cc, "get_resource", lambda *_a, **_kw: pytest.fail("must not run"))
-    app = ClitkaApp(ctx, start_type=None)
+    app = ClitkaApp(ctx, open_tree=False)
     async with app.run_test() as pilot:
         await _explorer(app, ctx, pilot)
         await pilot.press("f9")
@@ -208,7 +208,7 @@ async def test_escape_closes_the_menu_without_running_anything(ctx, listed, monk
 @pytest.mark.asyncio
 async def test_result_screen_escape_returns_to_the_explorer(ctx, listed, monkeypatch):
     monkeypatch.setattr(cc, "get_resource", lambda _c, t, i: cc.Resource(t, i, {"BucketName": i}))
-    app = ClitkaApp(ctx, start_type=None)
+    app = ClitkaApp(ctx, open_tree=False)
     async with app.run_test() as pilot:
         await _explorer(app, ctx, pilot)
         await pilot.press("f9")
