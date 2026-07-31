@@ -86,6 +86,21 @@ class Context:
     def with_region(self, region: str | None) -> Context:
         return replace(self, region=region, _clients={})
 
+    def renewed(self) -> Context:
+        """A twin of this context with every cached thing thrown away.
+
+        Needed after a fresh SSO login: the boto3 session and its clients are
+        holding on to the credential resolver that already failed, and the
+        identity cache still says "unauthenticated". Building a new Context is
+        cheaper and more honest than trying to invalidate them one by one.
+        """
+        return Context(
+            profile=self.profile,
+            region=self.region,
+            read_only=self.read_only,
+            source=dict(self.source),
+        )
+
     @cached_property
     def session(self) -> boto3.Session:
         try:

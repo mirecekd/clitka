@@ -16,6 +16,7 @@ from textual.widgets.tree import TreeNode
 from textual.worker import get_current_worker
 
 from clitka.core import cloudcontrol as cc
+from clitka.core.errors import ExpiredLoginError
 from clitka.tui.restypes import MAX_ROWS, PAGE_ROWS
 from clitka.tui.treemodel import ResourceNode, TypeNode
 
@@ -114,6 +115,11 @@ class BranchLoader:
         self.placeholder(branch, f"[red]{exc}[/red]")
         branch.set_label(node.label())
         self._title(f"{node.type_name}\n[ERROR] {exc}")  # type: ignore[attr-defined]
+        if isinstance(exc, ExpiredLoginError):
+            # A dead login is the one error the user can actually fix from here.
+            offer = getattr(self.app, "offer_login", None)  # type: ignore[attr-defined]
+            if offer is not None:
+                offer(f"{node.type_name}: the login has expired")
 
 
 def _self_check() -> None:

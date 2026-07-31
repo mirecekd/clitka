@@ -22,6 +22,7 @@ from clitka.tui.dropdown import TextDrop
 from clitka.tui.dropmenu import DropMenu
 from clitka.tui.explorer import COMMON_TYPES, ExplorerScreen
 from clitka.tui.keybar import KeyBar
+from clitka.tui.logindrop import LoginDrop
 from clitka.tui.picker import CommandPalette
 from clitka.tui.restree import ResourceTree
 from clitka.tui.restypes import TREE_TYPES
@@ -51,6 +52,7 @@ class ClitkaApp(App[None]):
         Binding("f1", "help", "Help", show=False),
         Binding("f2", "switch_profile", "Profile", show=False),
         Binding("f3", "switch_region", "Region", show=False),
+        Binding("f4", "login", "Login", show=False),
         Binding("f5", "refresh", "Refresh", show=False),
         Binding("f10", "quit", "Quit", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -109,6 +111,29 @@ class ClitkaApp(App[None]):
     def action_help(self) -> None:
         """F1: drop the key reference out from under the menu bar."""
         self.push_screen(TextDrop("F1  Help", HELP, toggle_key="f1"))
+
+    def action_login(self) -> None:
+        """F4: run the SSO device flow right here, then refresh everything.
+
+        The VS Code toolkit does this the moment it notices the login is gone; a
+        red "token expired" line the user cannot act on is not an answer.
+        """
+        self.push_screen(LoginDrop(self.context), self._logged_in)
+
+    def _logged_in(self, ok: object) -> None:
+        if ok:
+            # The old session still holds the credential resolver that failed.
+            self.context = self.context.renewed()
+            self._context_changed()
+
+    def offer_login(self, why: str = "") -> None:
+        """A screen hit an expired login - open the panel for it."""
+        if any(isinstance(screen, LoginDrop) for screen in self.screen_stack):
+            return  # one login at a time
+        drop = LoginDrop(self.context)
+        if why:
+            drop.lines.insert(0, f"[dim]{why}[/dim]")
+        self.push_screen(drop, self._logged_in)
 
     def action_palette(self) -> None:
         """`:` - choose a resource type and open the explorer for it.

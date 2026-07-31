@@ -1,11 +1,12 @@
 """The top function-key menu bar, in the spirit of Turbo Vision.
 
 Textual's own `Footer` renders whatever bindings a screen declares, which makes
-the bar move around as screens change. CLITKA wants the opposite: the same six
+the bar move around as screens change. CLITKA wants the opposite: the same
 slots always in the same place, so the bar is rendered from a fixed list and
 each screen only says which slots it actually enables.
 
-It is docked at the *top* so the drop-down panels (F1/F2/F3) can slide out from
+It is docked at the *top* so the drop-down panels (F1/F2/F3/F4) can slide out from
+
 directly underneath the slot that was pressed. The status bar sits at the bottom:
 the menu on top is "what I can do", the status below is "where I am".
 """
@@ -19,6 +20,7 @@ SLOTS: tuple[tuple[str, str], ...] = (
     ("F1", "Help"),
     ("F2", "Profile"),
     ("F3", "Region"),
+    ("F4", "Login"),
     ("F5", "Refresh"),
     ("F9", "Actions"),
     ("F10", "Quit"),

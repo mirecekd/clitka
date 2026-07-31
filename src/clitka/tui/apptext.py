@@ -12,8 +12,10 @@ CLITKA - CLI ToolKit for AWS
   F1   help
   F2   switch profile
   F3   switch region
+  F4   sign in (IAM Identity Center device flow)
   F5   refresh identity
   F10  quit
+
 
 Every screen has a scriptable CLI equivalent - try `clitka resources --help`.
 """
@@ -23,7 +25,9 @@ HELP = """\
   F1   this help (F1 or escape closes it)
   F2   switch profile - for this session only
   F3   switch region  - for this session only
+  F4   sign in - runs the SSO device flow here, no shell needed
   F5   refresh
+
   F9   actions for the selected resource (inside the explorer)
   F10  quit
   q    quit

@@ -37,7 +37,8 @@ def test_status_bar_renders_without_network():
 
 
 def test_key_bar_slots_are_fixed_and_dimmable():
-    assert [key for key, _ in SLOTS] == ["F1", "F2", "F3", "F5", "F9", "F10"]
+    assert [key for key, _ in SLOTS] == ["F1", "F2", "F3", "F4", "F5", "F9", "F10"]
+
     full = render_bar()
     assert "[b]F9[/b] Actions" in full
     assert "[b]F10[/b] Quit" in full

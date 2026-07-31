@@ -55,6 +55,7 @@ class ResourceTree(ActionHost, BranchLoader, Screen[None]):
         # A Screen shadows the App's bindings, so the app-wide keys are forwarded.
         Binding("f2", "app.switch_profile", "Profile", show=False),
         Binding("f3", "app.switch_region", "Region", show=False),
+        Binding("f4", "app.login", "Login", show=False),
         Binding("f5", "reload", "Refresh", show=False),
         Binding("f9", "actions", "Actions", show=False),
         Binding("f10", "quit", "Quit", show=False),
