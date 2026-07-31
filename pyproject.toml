@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "clitka"
 # PEP 440 form of the date-based build version in src/clitka/__init__.py
 # (v260731.1 -> 260731.1). Bump both together.
-version = "260731.3"
+version = "260731.4"
 
 description = "CLITKA - CLI ToolKit for AWS: the AWS Toolkit workflow in your terminal"
 readme = "README.md"

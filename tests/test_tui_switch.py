@@ -6,7 +6,7 @@ import pytest
 
 from clitka.core.awsconfig import AwsConfig, Profile, SsoSession
 from clitka.core.context import Context, Identity
-from clitka.tui import app as app_module
+from clitka.tui import appswitch as switch_module
 from clitka.tui.app import ClitkaApp
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.dropmenu import DropMenu
@@ -34,7 +34,7 @@ def offline(monkeypatch):
     """An app whose identity, config and region list never touch the network."""
     ident = Identity(account="123456789012", arn="arn:aws:iam::1:user/mirek", user_id="A")
     monkeypatch.setattr(Context, "identity_or_none", lambda _self: ident)
-    monkeypatch.setattr(app_module, "load_aws_config", lambda: CONFIG)
+    monkeypatch.setattr(switch_module, "load_aws_config", lambda: CONFIG)
     monkeypatch.setattr(
         ClitkaApp, "_regions", lambda _self: ["eu-central-1", "eu-west-1", "us-east-1"]
     )
@@ -135,7 +135,8 @@ async def test_picking_the_active_profile_again_is_a_no_op(offline):
 
 @pytest.mark.asyncio
 async def test_an_empty_profile_list_explains_itself_instead_of_crashing(offline, monkeypatch):
-    monkeypatch.setattr(app_module, "load_aws_config", AwsConfig)
+    monkeypatch.setattr(switch_module, "load_aws_config", AwsConfig)
+
     app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press("f2")
