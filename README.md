@@ -29,9 +29,9 @@ invoke, deploy, tail, exec, upload, execute.
 
 ## Status
 
-**Pre-alpha, under active development.** Auth, context, the TUI shell and the
-generic resource explorer work; the per-service modules are being built milestone
-by milestone.
+**Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
+resource explorer and CloudWatch Logs work; the remaining per-service modules are
+being built milestone by milestone.
 
 What works today:
 
@@ -47,18 +47,32 @@ clitka resources types                        # every CFN resource type here
 clitka resources list AWS::S3::Bucket         # any type, via Cloud Control API
 clitka resources get AWS::S3::Bucket my-bkt
 clitka resources delete AWS::S3::Bucket my-bkt
+clitka logs groups                            # log groups, size and retention
+clitka logs streams /aws/lambda/my-fn
+clitka logs search /aws/lambda/my-fn -f ERROR -m 30
+clitka logs tail /aws/lambda/my-fn            # live tail, ctrl-c stops it
 ```
 
-In the TUI you land on a tree of the resource types worth looking at. Nothing is
-fetched until you open a branch: `enter` (or `space`) unfolds a type and its
-resources stream in page by page, `enter` again folds it and keeps them. `:` adds
-any other type the account exposes as a further branch, `F9` opens the actions for
-the resource under the cursor, `F5` forgets everything, `F10` quits.
+The TUI is split: the tree of resource types on the left, a preview of what you
+picked on the right. Nothing is fetched until you open a branch - `enter` (or
+`space`) unfolds a type and its resources stream in page by page, `enter` again
+folds it and keeps them. `enter` on a *resource* fills the preview pane; moving the
+cursor never costs an API call. `:` adds any other type the account exposes as a
+further branch, `tab` moves between the tree and the preview, `F9` opens the
+actions for what is selected, `F5` forgets everything, `F10` quits.
 
-`F1`, `F2` and `F3` drop a panel out from under the menu bar - help, and switching
-the profile or region **for the running session**; `clitka ctx use` is what makes a
-choice stick. The status bar always names the CLITKA build plus the profile,
-account and region a call would use, and says READ-ONLY when writes are refused.
+The preview has an Overview of the grouped properties and a Raw tab with the API
+response, and a service can add tabs of its own - a log group, for instance, gets
+an Events tab with its last hour. Pressing `t` on a log group opens the **live
+tail**: events as they happen, `space` pauses, `w` wraps, `s` saves what is
+buffered to a file, `escape` stops the session.
+
+`F1` to `F4` drop a panel out from under the menu bar - help, switching the profile
+or region **for the running session**, and signing in. `F4` runs the IAM Identity
+Center device flow right there, so an expired login never means dropping to a
+shell; `clitka ctx use` is what makes a profile choice stick. The status bar always
+names the CLITKA build plus the profile, account and region a call would use, and
+says READ-ONLY when writes are refused.
 
 Configuration precedence is `--profile/--region` flag, then `AWS_PROFILE` /
 `AWS_REGION`, then `~/.config/clitka/config.toml`, then the AWS defaults.
@@ -70,7 +84,8 @@ Roadmap, in order:
 
 1. Auth and context - profiles, IAM Identity Center login, region switching (done)
 2. TUI shell and the generic resources explorer (Cloud Control API) (done)
-3. CloudWatch Logs, including live tail
+3. CloudWatch Logs, including live tail (done)
+
 4. Lambda, ECS exec, EC2 SSM, ECR, API Gateway invoke, Systems Manager
 5. S3 browser and DynamoDB
 6. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
