@@ -1,103 +1,61 @@
-"""Turning a resource's properties into the grouped "Overview" the pane shows.
+"""Turning a resource into the "Overview" and "Raw" text the pane shows.
 
-No Textual import, so the grouping and the value formatting are unit-testable
-without a screen - the same seam as `tablemodel.py` and `treemodel.py`.
+No Textual import, so the assembly is unit-testable without a screen - the same
+seam as `tablemodel.py` and `treemodel.py`. The taxonomy it assembles with (which
+group a property belongs to, how a value reads) is `previewgroups.py`.
 
-The AWS console shows an EC2 instance as a handful of labelled panels rather than
-one flat dump, and that is what `sections_for` approximates: the identity first,
-then networking, then state, then everything else, with tags last because they are
-usually the longest and the least interesting.
+The names below are re-exported: `preview.py`, the tests and the docs all reach
+for `pm.GROUPS` / `pm.format_value`, and there is no reason to make them care that
+the constants moved next door for the 8 kB rule.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import yaml
 
 from clitka.core import cloudcontrol as cc
+from clitka.core import preview as pv
+from clitka.core.actions import ResourceRef
 from clitka.core.output import jsonable
-
-VALUE_WIDTH = 76  # a long scalar is trimmed to this before the pane wraps it
-
-# Which group a property lands in, decided by substrings of its name. First hit
-# wins, so this is *match* order, deliberately different from display order:
-# "Identity" claims "id", which would otherwise swallow VpcId and SubnetId, so
-# every more specific group is tried first. The self-check caught exactly that.
-#
-# ponytail: substring matching, not a per-type schema. Ceiling: a badly named
-# property lands in "Other". Upgrade path: let a plugin publish a group map for
-# its own types through the preview hook.
-GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Networking", ("vpc", "subnet", "securitygroup", "ip", "dns", "port", "cidr", "network")),
-    ("State", ("state", "status", "phase", "health", "enabled", "condition")),
-    ("Timing", ("time", "date", "created", "modified", "updated", "expir", "ttl", "retention")),
-    ("Size", ("size", "count", "capacity", "memory", "storage", "throughput", "bytes")),
-    ("Security", ("role", "policy", "kms", "encrypt", "certificate", "auth", "public")),
-    ("Identity", ("arn", "id", "name", "identifier", "key", "uri", "url", "endpoint")),
+from clitka.tui.previewgroups import (
+    GROUPS,
+    ORDER,
+    OTHER,
+    TAGS,
+    VALUE_WIDTH,
+    Section,
+    format_value,
+    group_of,
 )
-TAGS = "Tags"
-OTHER = "Other"
-# Display order: identity first (what am I looking at), tags last (longest).
-ORDER = ("Identity", "State", "Networking", "Security", "Size", "Timing", OTHER, TAGS)
 
-
-@dataclass(frozen=True)
-class Section:
-    """One labelled block of key/value rows in the Overview tab."""
-
-    title: str
-    rows: tuple[tuple[str, str], ...]
-
-    def lines(self) -> list[str]:
-        """Renderable lines: the title, then aligned `key  value` rows."""
-        if not self.rows:
-            return []
-        width = max(len(key) for key, _ in self.rows)
-        out = [f"[b]{self.title}[/b]"]
-        out.extend(f"  {key.ljust(width)}   {value}" for key, value in self.rows)
-        return out
-
-
-def group_of(key: str) -> str:
-    """Which section a property name belongs to."""
-    lowered = key.lower()
-    if lowered in ("tags", "tag", "taglist", "tagset"):
-        return TAGS
-    for name, needles in GROUPS:
-        if any(needle in lowered for needle in needles):
-            return name
-    return OTHER
-
-
-def format_value(value: Any) -> str:
-    """A property value as the pane should show it.
-
-    A nested structure becomes indented YAML rather than a JSON one-liner: it is
-    what the user would have run `--output yaml` for anyway.
-    """
-    if value is None:
-        return "[dim](none)[/dim]"
-    if isinstance(value, bool):
-        return "yes" if value else "no"
-    if isinstance(value, dict | list | tuple):
-        plain = jsonable(value)
-        if not plain:
-            return "[dim](empty)[/dim]"
-        text = yaml.safe_dump(plain, sort_keys=False, default_flow_style=False).rstrip()
-        return "\n" + "\n".join(f"    {line}" for line in text.splitlines())
-    text = str(jsonable(value))
-    if not text:
-        return "[dim](empty)[/dim]"
-    if len(text) > VALUE_WIDTH:
-        return text[: VALUE_WIDTH - 3] + "..."
-    return text
+__all__ = [
+    "GROUPS",
+    "ORDER",
+    "OTHER",
+    "TAGS",
+    "VALUE_WIDTH",
+    "Section",
+    "core_tabs",
+    "format_value",
+    "group_of",
+    "overview",
+    "raw_yaml",
+    "resource_from",
+    "sections_for",
+    "slug",
+]
 
 
 def sections_for(resource: cc.Resource) -> list[Section]:
     """Group a resource's properties into the panels the Overview tab shows."""
     buckets: dict[str, list[tuple[str, str]]] = {name: [] for name in ORDER}
+    # The name first, when there is one: on an EC2 instance the identifier alone
+    # tells nobody which machine this is (owner's request).
+    found = resource.name()
+    if found:
+        buckets["Identity"].append(("name", format_value(found)))
     buckets["Identity"].append(("identifier", format_value(resource.identifier)))
     buckets["Identity"].append(("type", resource.type_name))
     for key, value in resource.properties.items():
@@ -121,9 +79,17 @@ def slug(tab_id: str) -> str:
     return "".join(char if char.isalnum() or char in "_-" else "-" for char in tab_id)
 
 
+DERIVED = ("identifier", "name")
+"""Row keys the table adds itself - they are not properties AWS returned."""
+
+
 def resource_from(type_name: str, identifier: str, row: dict[str, Any]) -> cc.Resource:
-    """Rebuild a `cc.Resource` from the row the tree already carries - no API call."""
-    properties = {key: value for key, value in row.items() if key != "identifier"}
+    """Rebuild a `cc.Resource` from the row the tree already carries - no API call.
+
+    `identifier` and the derived `name` column are dropped again, so the Raw tab
+    shows only what the API actually said.
+    """
+    properties = {key: value for key, value in row.items() if key not in DERIVED}
     return cc.Resource(type_name, identifier, properties)
 
 
@@ -137,23 +103,34 @@ def raw_yaml(resource: cc.Resource) -> str:
     return yaml.safe_dump(payload, sort_keys=False, default_flow_style=False).rstrip()
 
 
+def core_tabs() -> list[pv.PreviewTab]:
+    """The two tabs every resource gets, built from the row the tree already has.
+
+    Neither calls AWS (`lazy=False`), which is what lets the pane fill them on the
+    UI thread - a plugin tab that does call AWS sets `lazy=True` instead.
+    """
+    return [
+        pv.PreviewTab(
+            pv.OVERVIEW,
+            "Overview",
+            lambda _ctx, ref: overview(_from_ref(ref)),
+            lazy=False,
+        ),
+        pv.PreviewTab(
+            pv.RAW,
+            "Raw",
+            lambda _ctx, ref: raw_yaml(_from_ref(ref)),
+            lazy=False,
+        ),
+    ]
+
+
+def _from_ref(ref: ResourceRef) -> cc.Resource:
+    return resource_from(ref.type_name, ref.identifier, ref.row)
+
+
 def _self_check() -> None:
-    assert group_of("Arn") == "Identity"
-    assert group_of("VpcId") == "Networking", group_of("VpcId")
-    assert group_of("InstanceState") == "State"
-    assert group_of("CreationDate") == "Timing"
-    assert group_of("Tags") == TAGS
-    assert group_of("Whatever") == OTHER
-    # "id" must not steal a property that is really about networking.
-    assert group_of("SubnetId") == "Networking"
-
-    assert format_value(None) == "[dim](none)[/dim]"
-    assert format_value(True) == "yes"
-    assert format_value({}) == "[dim](empty)[/dim]"
-    assert format_value("x" * 200).endswith("...")
-    nested = format_value({"a": {"b": 1}})
-    assert nested.startswith("\n    a:"), nested
-
+    # The taxonomy has its own self-check; this one is about the assembly.
     res = cc.Resource(
         "AWS::EC2::Instance",
         "i-123",
@@ -161,7 +138,7 @@ def _self_check() -> None:
             "InstanceType": "t3.micro",
             "VpcId": "vpc-1",
             "State": {"Name": "running"},
-            "Tags": [{"Key": "env", "Value": "dev"}],
+            "Tags": [{"Key": "Name", "Value": "web-01"}],
         },
     )
     names = [section.title for section in sections_for(res)]
@@ -173,11 +150,8 @@ def _self_check() -> None:
     assert "[b]Identity[/b]" in text
     assert "i-123" in text
     assert "t3.micro" in text
-
-    # Section.lines aligns the keys, so the values line up in a column.
-    lines = Section("T", (("a", "1"), ("long", "2"))).lines()
-    assert lines[0] == "[b]T[/b]"
-    assert lines[1].index("1") == lines[2].index("2"), lines
+    # The Name tag is what a human recognises the instance by, so it leads.
+    assert text.index("web-01") < text.index("t3.micro"), text
 
     # Textual refuses a dot in a widget id, and a plugin namespaces its tabs.
     assert slug("logs.events") == "logs-events"
@@ -187,11 +161,15 @@ def _self_check() -> None:
     rebuilt = resource_from("AWS::S3::Bucket", "b1", {"identifier": "b1", "Arn": "arn:x"})
     assert rebuilt.identifier == "b1"
     assert rebuilt.properties == {"Arn": "arn:x"}, "identifier must not be a property"
+    # `name` is derived by the table too - the Raw tab must not show it.
+    derived = resource_from("AWS::EC2::Instance", "i-1", {"identifier": "i-1", "name": "web-01"})
+    assert derived.properties == {}
 
     assert "TypeName: AWS::EC2::Instance" in raw_yaml(res)
 
     # An empty resource must still produce something, not blow up.
     assert overview(cc.Resource("AWS::S3::Bucket", "", {}))
+    assert GROUPS and VALUE_WIDTH > 0 and OTHER in ORDER  # the re-exports are live
     print("[OK] preview model self-check passed")
 
 

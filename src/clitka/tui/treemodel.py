@@ -54,21 +54,29 @@ class ResourceNode:
     resource: cc.Resource
 
     def label(self) -> str:
-        detail = summarise(self.resource)
+        """`name (identifier)  detail` - the name leads, because it is what a
+        human recognises the resource by. An EC2 instance is the reason: `i-0abc...`
+        says nothing, its `Name` tag says everything (owner's request).
+        """
         identifier = self.resource.identifier or "(no identifier)"
-        return f"{identifier}   [dim]{detail}[/dim]" if detail else identifier
+        name = self.resource.name()
+        head = f"[b]{name}[/b]   [dim]{identifier}[/dim]" if name else identifier
+        detail = summarise(self.resource)
+        return f"{head}   [dim]{detail}[/dim]" if detail else head
 
 
 def summarise(resource: cc.Resource, limit: int = 2) -> str:
     """A couple of the resource's own properties, for the leaf label.
 
-    ponytail: the first few keys that are not just the identifier again, in the
-    order AWS returned them. Ceiling: not necessarily the most interesting ones.
-    Upgrade path: a per-type list of preferred properties.
+    ponytail: the first few keys that are not just the identifier (or the name we
+    already show) again, in the order AWS returned them. Ceiling: not necessarily
+    the most interesting ones. Upgrade path: a per-type list of preferred
+    properties.
     """
+    name = resource.name()
     parts: list[str] = []
     for key, value in resource.properties.items():
-        if str(value) == resource.identifier:
+        if str(value) == resource.identifier or (name and str(value) == name):
             continue
         text = str(value)
         if not text or text == "{}" or text == "[]":
@@ -103,6 +111,20 @@ def _self_check() -> None:
     assert "BucketName" not in leaf.label()
     bare = ResourceNode("T", cc.Resource("T", "", {}))
     assert bare.label() == "(no identifier)"
+
+    # An EC2 instance leads with its Name tag, not with the instance id.
+    ec2 = ResourceNode(
+        "AWS::EC2::Instance",
+        cc.Resource(
+            "AWS::EC2::Instance",
+            "i-0abc",
+            {"Tags": [{"Key": "Name", "Value": "web-01"}], "InstanceType": "t3.micro"},
+        ),
+    )
+    label = ec2.label()
+    assert label.startswith("[b]web-01[/b]"), label
+    assert "i-0abc" in label
+
     print("[OK] tree model self-check passed")
 
 
