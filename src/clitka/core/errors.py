@@ -11,9 +11,20 @@ from botocore.exceptions import (
     ClientError,
     NoCredentialsError,
     ProfileNotFound,
+    SSOError,
+    TokenRetrievalError,
 )
 
 F = TypeVar("F", bound=Callable[..., Any])
+
+# AWS says "your login ran out" in several dialects. All of them mean the same
+# thing to a user: sign in again.
+EXPIRED_CODES = (
+    "ExpiredToken",
+    "ExpiredTokenException",
+    "InvalidClientTokenId",
+    "UnrecognizedClientException",
+)
 
 
 class ClitkaError(Exception):
@@ -30,6 +41,22 @@ class AuthError(ClitkaError):
     def __init__(self, message: str, profile: str | None = None) -> None:
         self.profile = profile
         super().__init__(message)
+
+
+class ExpiredLoginError(AuthError):
+    """The SSO login ran out. The only cure is signing in again.
+
+    A distinct type so the TUI can offer the device flow instead of printing a
+    red line the user can do nothing about, and so the CLI can say
+    "run `clitka auth login`".
+    """
+
+    def __init__(self, message: str, profile: str | None = None) -> None:
+        super().__init__(message, profile)
+
+    def hint(self) -> str:
+        where = f" -p {self.profile}" if self.profile else ""
+        return f"Sign in again: `clitka auth login{where}`"
 
 
 class ReadOnlyError(ClitkaError):
@@ -95,6 +122,11 @@ def wrap_aws_errors(func: F) -> F:
             err = exc.response.get("Error", {})
             meta = exc.response.get("ResponseMetadata", {})
             profile, region = _where(args)
+            code = str(err.get("Code", "ClientError"))
+            if code in EXPIRED_CODES:
+                raise ExpiredLoginError(
+                    f"{_operation_name(exc)}: {err.get('Message', code)}", profile
+                ) from exc
             raise AwsError(
                 operation=_operation_name(exc),
                 code=str(err.get("Code", "ClientError")),
@@ -106,6 +138,11 @@ def wrap_aws_errors(func: F) -> F:
             raise ConfigError(str(exc)) from exc
         except NoCredentialsError as exc:
             raise AuthError(str(exc)) from exc
+        except (TokenRetrievalError, SSOError) as exc:
+            # "Token has expired and refresh failed" arrives here, not as a
+            # ClientError - botocore fails while *resolving* credentials.
+            profile, _ = _where(args)
+            raise ExpiredLoginError(str(exc), profile) from exc
         except BotoCoreError as exc:
             raise ClitkaError(str(exc)) from exc
 
@@ -134,6 +171,34 @@ def _self_check() -> None:
     else:  # pragma: no cover
         raise AssertionError("AwsError was not raised")
 
+    @wrap_aws_errors
+    def stale() -> None:
+        raise TokenRetrievalError(provider="sso", error_msg="Token has expired")
+
+    try:
+        stale()
+    except ExpiredLoginError as exc:
+        assert "expired" in str(exc).lower(), exc
+        assert "auth login" in exc.hint()
+    else:  # pragma: no cover
+        raise AssertionError("ExpiredLoginError was not raised")
+
+    @wrap_aws_errors
+    def stale_call() -> None:
+        raise ClientError(
+            {"Error": {"Code": "ExpiredToken", "Message": "gone"}, "ResponseMetadata": {}},
+            "ListResources",
+        )
+
+    try:
+        stale_call()
+    except ExpiredLoginError as exc:
+        assert "ListResources" in str(exc), exc
+    else:  # pragma: no cover
+        raise AssertionError("ExpiredLoginError was not raised for ExpiredToken")
+
+    # An ExpiredLoginError must still be catchable as the generic AuthError.
+    assert issubclass(ExpiredLoginError, AuthError)
     print("[OK] errors self-check passed")
 
 
