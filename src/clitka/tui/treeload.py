@@ -23,6 +23,8 @@ from clitka.tui.treemodel import ResourceNode, TypeNode
 NOT_LOADED = "[dim](not loaded)[/dim]"
 LOADING = "[dim]loading...[/dim]"
 NONE_FOUND = "[dim](none)[/dim]"
+# The TUI has no login screen on purpose; this is what the user has to do instead.
+RELOGIN = "run `clitka auth login` in a shell, then F5"
 
 
 class BranchLoader:
@@ -114,12 +116,11 @@ class BranchLoader:
         node.error = str(exc)
         self.placeholder(branch, f"[red]{exc}[/red]")
         branch.set_label(node.label())
-        self._title(f"{node.type_name}\n[ERROR] {exc}")  # type: ignore[attr-defined]
+        message = f"{node.type_name}\n[ERROR] {exc}"
         if isinstance(exc, ExpiredLoginError):
-            # A dead login is the one error the user can actually fix from here.
-            offer = getattr(self.app, "offer_login", None)  # type: ignore[attr-defined]
-            if offer is not None:
-                offer(f"{node.type_name}: the login has expired")
+            # Signing in is not part of the TUI (owner's call) - say what fixes it.
+            message += f"\n[dim]{RELOGIN}[/dim]"
+        self._title(message)  # type: ignore[attr-defined]
 
 
 def _self_check() -> None:
