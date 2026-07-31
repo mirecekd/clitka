@@ -18,8 +18,9 @@ CLITKA is one tool with two faces:
 
 - **TUI** - run `clitka` with no arguments and you land on a tree of resource
   types: open one and its resources unfold underneath, loaded on demand.
-  Keyboard-first, with a function-key menu bar on top, the profile / account /
-  region status bar at the bottom, and `F9` for the actions of what is selected.
+  Keyboard-first, with a key menu bar on top, the profile / account / region
+  status bar at the bottom, and `F9` for the actions of what is selected.
+
 
 - **CLI** - run `clitka <service> <verb>`. Every action available in the TUI is
   also a plain, scriptable command with `--output json|yaml|table`.
@@ -49,7 +50,8 @@ clitka resources get AWS::S3::Bucket my-bkt
 clitka resources delete AWS::S3::Bucket my-bkt
 clitka logs groups                            # log groups, size and retention
 clitka logs streams /aws/lambda/my-fn
-clitka logs search /aws/lambda/my-fn -f ERROR -m 30
+clitka logs search /aws/lambda/my-fn -f ERROR --since 3h
+
 clitka logs tail /aws/lambda/my-fn            # live tail, ctrl-c stops it
 ```
 
@@ -57,22 +59,102 @@ The TUI is split: the tree of resource types on the left, a preview of what you
 picked on the right. Nothing is fetched until you open a branch - `enter` (or
 `space`) unfolds a type and its resources stream in page by page, `enter` again
 folds it and keeps them. `enter` on a *resource* fills the preview pane; moving the
-cursor never costs an API call. `:` adds any other type the account exposes as a
-further branch, `tab` moves between the tree and the preview, `F9` opens the
-actions for what is selected, `F5` forgets everything, `F10` quits.
+cursor never costs an API call. Resources are listed by their **name** where they
+have one - the `Name` tag on an EC2 instance, say - with the identifier beside it,
+because `i-0abc1234...` tells nobody which machine that is. `:` adds any other type
+the account exposes as a further branch, `tab` moves between the tree and the
+preview (the focused side is outlined), `F3` views the selected resource in full,
+`F4` is the edit slot, `F9` opens the actions for it, `F5` forgets everything,
+`F10` quits.
 
 The preview has an Overview of the grouped properties and a Raw tab with the API
 response, and a service can add tabs of its own - a log group, for instance, gets
-an Events tab with its last hour. Pressing `t` on a log group opens the **live
-tail**: events as they happen, `space` pauses, `w` wraps, `s` saves what is
-buffered to a file, `escape` stops the session.
+an Events tab. How far back that tab looks is up to you: `W` drops a **time window**
+picker with presets from 5 minutes to a year, or a duration you type. Inside the
+preview the arrows do what they look like they should: `left`/`right` walk the tabs,
+`up`/`down` scroll one. Pressing `t` on a log group opens the **live tail**: events
+as they happen, `space` pauses, `w` wraps, `s` saves what is buffered to a file,
+`escape` stops the session.
 
-`F1` to `F4` drop a panel out from under the menu bar - help, switching the profile
-or region **for the running session**, and signing in. `F4` runs the IAM Identity
-Center device flow right there, so an expired login never means dropping to a
-shell; `clitka ctx use` is what makes a profile choice stick. The status bar always
-names the CLITKA build plus the profile, account and region a call would use, and
-says READ-ONLY when writes are refused.
+`F1`, `P`, `R` and `W` drop a panel out from under the menu bar - help, switching
+the profile or region **for the running session**, and the time window. The letters
+take either case; `clitka ctx use` is what makes a profile choice stick. Signing in
+is deliberately **not** a screen: run `clitka auth login` (or `aws sso login`) in a
+shell and press `F5` to pick the new token up. The status bar always names the
+CLITKA build plus the profile, account and region a call would use, and says
+READ-ONLY when writes are refused.
+
+
+## Keyboard
+
+Everything, in one place. Letter keys take either case.
+
+### Always available
+
+| Key | What it does |
+|---|---|
+| `F1` | help for the current screen (`F1` or `escape` closes it) |
+| `:` | command palette - open any resource type |
+| `P` | switch profile - this session only |
+| `R` | switch region - this session only |
+| `W` | time window - how far back the log preview and `F9` look |
+| `F3` | view the selected resource in full (`GetResource`), as YAML |
+
+| `F4` | edit the selected resource |
+| `F5` | refresh |
+| `F9` | actions for the selected resource |
+| `F10` / `q` | quit |
+
+### The resource tree (the landing screen)
+
+| Key | What it does |
+|---|---|
+| `up` / `down` | move one node; `page up` / `page down` a screenful |
+| `ctrl+home` / `ctrl+end` | first / last node |
+| `enter` / `space` | open a type (loads it) or close it again; on a resource, preview it |
+| `right` / `left` | open / close without moving off the node |
+| `tab` | move between the tree and the preview - the focused side is outlined |
+| `t` | on a log group: follow it live (CloudWatch live tail) |
+| `F5` | collapse everything and forget it - also the retry after an error |
+
+### Inside the preview pane
+
+| Key | What it does |
+|---|---|
+| `left` / `right` | walk the tabs (Overview, Raw, Events, ...) |
+| `up` / `down` | scroll the tab; `page up` / `page down` page it |
+| `home` / `end` | jump to the ends |
+| `tab` | back to the tree |
+
+### The time window picker (`W`)
+
+| Key | Window |
+|---|---|
+| `1` `2` `3` `4` `5` `6` | 5m, 15m, 1h, 3h, 6h, 12h |
+| `7` `8` `9` `0` | 24h, 3d, 7d, 2w |
+| `n` / `y` | 1 month / 1 year |
+| `c` | custom - type a duration: `90m`, `2h`, `3d`, `2w`, `1mo`, `1y` (a bare number means minutes) |
+
+It starts at `1h` and lasts for the running session only.
+`clitka logs search --since 3h` is the same window from a shell.
+
+### The flat explorer (what `:` opens outside the tree)
+
+| Key | What it does |
+|---|---|
+| `/` | filter every row loaded so far (`escape` clears it) |
+| `s` | sort by the current column (again reverses it) |
+| `escape` | back |
+
+### The live tail screen (`t` on a log group)
+
+| Key | What it does |
+|---|---|
+| `space` | pause the scroll - events keep arriving and the status says how many |
+| `w` | wrap long lines |
+| `s` | save the buffer to a file |
+| `escape` | stop the session and go back |
+
 
 Configuration precedence is `--profile/--region` flag, then `AWS_PROFILE` /
 `AWS_REGION`, then `~/.config/clitka/config.toml`, then the AWS defaults.
