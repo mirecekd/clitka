@@ -103,6 +103,8 @@ The preview
 
   enter            on a *resource*: show it in the pane on the right
   tab              move between the tree and the preview, and back
+  t                on a log group: follow it live (CloudWatch live tail)
+
 
 Only enter (or a mouse click) fills the preview - moving the cursor never calls
 AWS, so you can scroll a long branch for free. The pane has an Overview of the

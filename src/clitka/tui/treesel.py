@@ -79,6 +79,21 @@ class TreeSelection:
         if isinstance(data, ResourceNode):
             self.preview.show(act.ResourceRef.from_row(data.type_name, data.resource.row()))
 
+    def action_tail(self) -> None:
+        """`t`: follow the selected log group live.
+
+        Deliberately not an `Action`: an action returns one finished result and a
+        live tail never finishes, so the F9 entry only prints the command. This is
+        the real thing. It applies to a log group and quietly does nothing else.
+        """
+        from clitka.tui.tailscreen import open_tail
+
+        ref = self.selected_ref()
+        if ref is None or ref.type_name != "AWS::Logs::LogGroup":
+            return
+        self._title(f"live tail: {ref.identifier} - resolving...")  # type: ignore[attr-defined]
+        open_tail(self.app, self.context, [ref.identifier])  # type: ignore[attr-defined]
+
     def action_focus_preview(self) -> None:
         """tab: move between the tree and the preview, and back."""
         pane = self.preview

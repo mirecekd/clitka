@@ -67,6 +67,7 @@ class ResourceTree(TreeSelection, ActionHost, BranchLoader, Screen[None]):
         # reaches for, so it is claimed here.
         Binding("enter", "toggle", "Open / preview", show=False, priority=True),
         Binding("tab", "focus_preview", "Preview / tree", show=False, priority=True),
+        Binding("t", "tail", "Live tail", show=False),
         Binding("f1", "help", "Help", show=False),
         # A Screen shadows the App's bindings, so the app-wide keys are forwarded.
         Binding("f2", "app.switch_profile", "Profile", show=False),
