@@ -13,7 +13,7 @@ from clitka.core import preview as pv
 from clitka.core.actions import ResourceRef
 from clitka.core.context import Context, Identity
 from clitka.tui.app import ClitkaApp
-from clitka.tui.preview import BUILDING, PreviewPane, core_tabs
+from clitka.tui.preview import BUILDING, PreviewPane, core_tabs, slug
 from clitka.tui.restree import ResourceTree
 
 TYPE = "AWS::S3::Bucket"
@@ -149,7 +149,9 @@ async def test_a_plugin_tab_is_offered_and_built_on_a_worker(offline, monkeypatc
         calls.append(ref.identifier)
         return "the last events"
 
-    tab = pv.PreviewTab("events", "Events", build, applies_to=pv.for_type(TYPE), lazy=True)
+    # A dotted, namespaced id like a real plugin uses - Textual rejects the dot
+    # in a widget id, which is exactly the bug this caught on a real log group.
+    tab = pv.PreviewTab("logs.events", "Events", build, applies_to=pv.for_type(TYPE), lazy=True)
     monkeypatch.setattr(pv, "registered", lambda: [tab])
 
     app = ClitkaApp(offline, open_tree=False)
@@ -159,16 +161,16 @@ async def test_a_plugin_tab_is_offered_and_built_on_a_worker(offline, monkeypatc
         await pilot.press("enter")
         await pilot.pause()
         pane = app.screen.query_one(PreviewPane)
-        assert [t.id for t in pane.tabs] == [pv.OVERVIEW, pv.RAW, "events"]
+        assert [t.id for t in pane.tabs] == [pv.OVERVIEW, pv.RAW, "logs.events"]
         # A lazy tab is not built until it is shown.
         assert calls == []
 
-        pane.query_one("#preview-tabs").active = pane._tab_id("events")
+        pane.query_one("#preview-tabs").active = pane._tab_id("logs.events")
         await pilot.pause()
         await app.workers.wait_for_complete()
         await pilot.pause()
         assert calls == ["bucket-one"]
-        assert pane.body_text("events") == "the last events"
+        assert pane.body_text("logs.events") == "the last events"
 
 
 @pytest.mark.asyncio
@@ -194,6 +196,21 @@ async def test_a_failing_tab_shows_the_error_instead_of_crashing(offline, monkey
 
 def test_a_lazy_tab_shows_a_placeholder_first():
     assert "loading" in BUILDING
+
+
+def test_a_namespaced_tab_id_becomes_a_legal_widget_id():
+    """Textual only allows letters, digits, '_' and '-' in an id.
+
+    A plugin namespaces its tabs (`logs.events`), and the dot raised
+    `BadIdentifier` the first time a real log group was previewed.
+    """
+    assert slug("logs.events") == "logs-events"
+    assert slug("overview") == "overview"
+    assert slug("a b.c:d") == "a-b-c-d"
+    pane = PreviewPane(Context(region="eu-central-1"))
+    for candidate in (pane._tab_id("logs.events"), pane._body_id("logs.events")):
+        assert "." not in candidate
+        assert all(char.isalnum() or char in "_-" for char in candidate), candidate
 
 
 def test_pane_forgets_its_cache_when_the_context_changes():

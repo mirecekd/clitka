@@ -28,6 +28,11 @@ EMPTY = "[dim]Press enter on a resource to preview it.[/dim]"
 BUILDING = "[dim]loading...[/dim]"
 
 
+# A plugin namespaces its tab ids with a dot, which Textual refuses in a widget
+# id; `pm.slug` is what makes them legal. Re-exported for the tests.
+slug = pm.slug
+
+
 def core_tabs() -> list[pv.PreviewTab]:
     """The two tabs every resource gets, built from what the tree already has."""
     return [
@@ -48,10 +53,7 @@ def core_tabs() -> list[pv.PreviewTab]:
 
 def _resource(ref: ResourceRef):
     """Rebuild a `cc.Resource` from the row the tree carries - no API call."""
-    from clitka.core import cloudcontrol as cc
-
-    properties = {k: v for k, v in ref.row.items() if k != "identifier"}
-    return cc.Resource(ref.type_name, ref.identifier, properties)
+    return pm.resource_from(ref.type_name, ref.identifier, ref.row)
 
 
 class PreviewPane(Vertical):
@@ -98,10 +100,10 @@ class PreviewPane(Vertical):
             yield Static(EMPTY, id=self._body_id("empty"))
 
     def _tab_id(self, tab_id: str) -> str:
-        return f"tab-{self.generation}-{tab_id}"
+        return f"tab-{self.generation}-{slug(tab_id)}"
 
     def _body_id(self, tab_id: str) -> str:
-        return f"body-{self.generation}-{tab_id}"
+        return f"body-{self.generation}-{slug(tab_id)}"
 
     # --- filling ----------------------------------------------------------
 

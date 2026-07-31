@@ -111,6 +111,22 @@ def overview(resource: cc.Resource) -> str:
     return "\n\n".join(blocks)
 
 
+def slug(tab_id: str) -> str:
+    """A tab id as something Textual will accept as a widget id.
+
+    Textual only allows letters, digits, `_` and `-`, and a plugin namespaces its
+    tabs with a dot (`logs.events`) - which raises `BadIdentifier` at *runtime*,
+    the first time that tab is offered. Found on a real log group.
+    """
+    return "".join(char if char.isalnum() or char in "_-" else "-" for char in tab_id)
+
+
+def resource_from(type_name: str, identifier: str, row: dict[str, Any]) -> cc.Resource:
+    """Rebuild a `cc.Resource` from the row the tree already carries - no API call."""
+    properties = {key: value for key, value in row.items() if key != "identifier"}
+    return cc.Resource(type_name, identifier, properties)
+
+
 def raw_yaml(resource: cc.Resource) -> str:
     """The resource as the API returned it - the "Raw" tab."""
     payload = {
@@ -163,7 +179,17 @@ def _self_check() -> None:
     assert lines[0] == "[b]T[/b]"
     assert lines[1].index("1") == lines[2].index("2"), lines
 
+    # Textual refuses a dot in a widget id, and a plugin namespaces its tabs.
+    assert slug("logs.events") == "logs-events"
+    assert slug("overview") == "overview"
+    assert all(char.isalnum() or char in "_-" for char in slug("a b.c:d"))
+
+    rebuilt = resource_from("AWS::S3::Bucket", "b1", {"identifier": "b1", "Arn": "arn:x"})
+    assert rebuilt.identifier == "b1"
+    assert rebuilt.properties == {"Arn": "arn:x"}, "identifier must not be a property"
+
     assert "TypeName: AWS::EC2::Instance" in raw_yaml(res)
+
     # An empty resource must still produce something, not blow up.
     assert overview(cc.Resource("AWS::S3::Bucket", "", {}))
     print("[OK] preview model self-check passed")
