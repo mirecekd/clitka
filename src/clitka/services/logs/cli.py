@@ -14,6 +14,7 @@ from typing import Any
 import typer
 
 from clitka.core import logs as lg
+from clitka.core import timerange as tr
 from clitka.core.context import Context
 from clitka.core.errors import ClitkaError
 from clitka.core.livetail import MAX_GROUPS, LiveTail
@@ -94,11 +95,23 @@ def search(
     group: str = typer.Argument(..., help="Log group name."),
     pattern: str = typer.Option(None, "--pattern", "-f", help="CloudWatch filter pattern."),
     minutes: float = typer.Option(60.0, "--minutes", "-m", help="How far back to look."),
+    since: str = typer.Option(
+        None, "--since", "-S", help="How far back, as a duration: 90m, 2h, 3d, 2w, 1mo, 1y."
+    ),
     limit: int = typer.Option(200, "--limit", "-n", help="Stop after this many events."),
     output: OutputFormat = typer.Option(OutputFormat.AUTO, "--output", "-o"),
 ) -> None:
-    """Search a group's events with FilterLogEvents."""
+    """Search a group's events with FilterLogEvents.
+
+    `--since 3h` is the readable form of `--minutes 180`, and the same window the
+    TUI's `w` key picks. It wins when both are given.
+    """
     ctx = _ctx(typer_ctx)
+    if since:
+        try:
+            minutes = tr.parse(since).minutes
+        except ValueError as exc:
+            raise _fail(exc) from exc
     try:
         found = lg.recent_events(ctx, group, minutes=minutes, pattern=pattern, limit=limit)
     except ClitkaError as exc:
@@ -106,7 +119,7 @@ def search(
     if output.resolve() is OutputFormat.TABLE:
         for event in found:
             console.print(event.line(show_stream=True), highlight=False, markup=False)
-        console.print(f"[dim]{len(found)} event(s)[/dim]")
+        console.print(f"[dim]{len(found)} event(s) in the last {tr.human(minutes)}[/dim]")
         return
     render(_event_rows(found), fmt=output, columns=EVENT_COLUMNS, title=group)
 

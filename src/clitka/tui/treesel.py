@@ -94,17 +94,31 @@ class TreeSelection:
         self._title(f"live tail: {ref.identifier} - resolving...")  # type: ignore[attr-defined]
         open_tail(self.app, self.context, [ref.identifier])  # type: ignore[attr-defined]
 
+    def adopt_window(self, window) -> None:
+        """`w` picked a different time window - whatever is time-based is stale.
+
+        Only the preview is: the tree lists resources, not events. Clearing the
+        cache and re-showing the same resource is what makes the `Events` tab
+        refetch through the new window.
+        """
+        self.preview.cache.clear()
+        self._title(f"time window: last {window}")  # type: ignore[attr-defined]
+        ref = self.selected_ref()
+        if ref is not None:
+            self.preview.show(ref)
+
     def action_focus_preview(self) -> None:
-        """tab: move between the tree and the preview, and back."""
+        """tab: move between the tree and the preview, and back.
+
+        Landing on the *tab strip* rather than on a scroll body is deliberate:
+        that is what lets left/right walk Overview / Raw / plugin tabs from the
+        keyboard, which was previously mouse-only (owner's report).
+        """
         pane = self.preview
-        focused = self.focused  # type: ignore[attr-defined]
-        if focused is not None and pane in focused.ancestors_with_self:
+        if pane.focused_here(self.focused):  # type: ignore[attr-defined]
             self.rtree.focus()  # type: ignore[attr-defined]
             return
-        for child in pane.query("VerticalScroll"):
-            child.focus()
-            return
-        pane.focus()
+        pane.focus_pane()
 
 
 def _self_check() -> None:

@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from clitka.core import logs as lg
 from clitka.core import preview as pv
+from clitka.core import timerange as tr
 from clitka.core.actions import Action, ActionResult, ResourceRef
 from clitka.core.context import Context
 
 TYPE_NAME = "AWS::Logs::LogGroup"
-PREVIEW_MINUTES = 60.0
 PREVIEW_LIMIT = 300
 STREAM_LIMIT = 20
 
@@ -28,9 +28,10 @@ def group_name(ref: ResourceRef) -> str:
 
 def _events_text(ctx: Context, name: str, minutes: float, limit: int) -> str:
     events = lg.recent_events(ctx, name, minutes=minutes, limit=limit)
+    window = tr.human(minutes)
     if not events:
-        return f"[dim](nothing in the last {minutes:.0f} minutes)[/dim]"
-    head = f"[dim]{len(events)} event(s) in the last {minutes:.0f} minutes[/dim]"
+        return f"[dim](nothing in the last {window})[/dim]"
+    head = f"[dim]{len(events)} event(s) in the last {window}[/dim]"
     # No markup: a log line full of brackets must not be re-interpreted as one.
     body = "\n".join(escape_markup(event.line(show_stream=True)) for event in events)
     return f"{head}\n\n{body}"
@@ -42,12 +43,21 @@ def escape_markup(text: str) -> str:
 
 
 def show_events(ctx: Context, ref: ResourceRef) -> ActionResult:
-    """F9: the last hour of events, as a scrollable result."""
+    """F9: the chosen time window of events, as a scrollable result.
+
+    The window is whatever `w` last picked - see `core/timerange.py`.
+    """
     name = group_name(ref)
+    minutes = tr.minutes()
     return ActionResult(
-        f"{name} - last {PREVIEW_MINUTES:.0f} min",
-        _events_text(ctx, name, PREVIEW_MINUTES, PREVIEW_LIMIT),
+        f"{name} - last {tr.human(minutes)}",
+        _events_text(ctx, name, minutes, PREVIEW_LIMIT),
     )
+
+
+def events_label() -> str:
+    """The F9 menu entry, which names the window it is about to fetch."""
+    return f"Last {tr.human(tr.minutes())} of events"
 
 
 def show_streams(ctx: Context, ref: ResourceRef) -> ActionResult:
@@ -86,7 +96,9 @@ def show_tail_hint(ctx: Context, ref: ResourceRef) -> ActionResult:
 ACTIONS: tuple[Action, ...] = (
     Action(
         id="logs.events",
-        label="Last hour of events",
+        # A static label would lie as soon as `w` changed the window; the menu
+        # asks for `label` again every time it opens.
+        label=events_label,
         run=show_events,
         key="l",
         applies_to=is_log_group,
@@ -110,7 +122,7 @@ ACTIONS: tuple[Action, ...] = (
 
 def build_events_tab(ctx: Context, ref: ResourceRef) -> str:
     """The `Events` preview tab: the log itself, right beside the tree."""
-    return _events_text(ctx, group_name(ref), PREVIEW_MINUTES, PREVIEW_LIMIT)
+    return _events_text(ctx, group_name(ref), tr.minutes(), PREVIEW_LIMIT)
 
 
 PREVIEWS: tuple[pv.PreviewTab, ...] = (

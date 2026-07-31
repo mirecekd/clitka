@@ -57,17 +57,22 @@ class DropMenu(DropPanel):
         items: Sequence[MenuItem],
         toggle_key: str = "",
         hint: str = "",
+        filterable: bool = True,
     ) -> None:
         super().__init__()
         self.TOGGLE_KEY = toggle_key
         self.title_text = title
         self.items = list(items)
         self.hint = hint
+        # `filterable=False` keeps the single-key shortcuts working on a list that
+        # is long but fully keyed - the time windows are 13 rows, all on a key,
+        # and a focused filter box would swallow every one of them.
+        self.filterable = filterable
         self.matches: list[MenuItem] = list(self.items)
 
     @property
     def filtered(self) -> bool:
-        return len(self.items) > FILTER_THRESHOLD
+        return self.filterable and len(self.items) > FILTER_THRESHOLD
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -150,6 +155,9 @@ def _self_check() -> None:
     big = DropMenu("Profile", [MenuItem(f"p{n}", f"p{n}") for n in range(20)], "f2")
     assert big.filtered is True
     assert big.TOGGLE_KEY == "f2"
+    # A long but fully keyed list opts out, so its shortcuts keep working.
+    keyed = DropMenu("Window", big.items, "w", filterable=False)
+    assert keyed.filtered is False
     print("[OK] drop menu self-check passed")
 
 

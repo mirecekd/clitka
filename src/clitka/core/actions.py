@@ -53,17 +53,31 @@ class Action:
     """
 
     id: str
-    label: str
+    label: str | Callable[[], str]
+    """Usually plain text; a callable when it depends on session state.
+
+    `logs.events` names the time window `w` picked, which can change between two
+    openings of the menu - hence `text()` rather than reading `label` directly.
+    """
     run: Callable[[Any, ResourceRef], ActionResult]
     key: str | None = None
     applies_to: Callable[[ResourceRef], bool] = lambda _ref: True
     destructive: bool = False
 
+    def text(self) -> str:
+        """The label right now. A broken callable must not take the menu down."""
+        if not callable(self.label):
+            return self.label
+        try:
+            return self.label()
+        except Exception:
+            return self.id
+
     def menu_label(self) -> str:
         """Label as shown in the F9 menu: key hint first, `!` when destructive."""
         prefix = f"{self.key}  " if self.key else ""
         suffix = "  (destructive)" if self.destructive else ""
-        return f"{prefix}{self.label}{suffix}"
+        return f"{prefix}{self.text()}{suffix}"
 
 
 def available(actions: Sequence[Action], ref: ResourceRef | None) -> list[Action]:
@@ -105,6 +119,15 @@ def _self_check() -> None:
     assert available([always], None) == []
     assert always.run(None, ref).title == "ok"
     assert "destructive" in Action("d", "Del", always.run, destructive=True).menu_label()
+
+    # A label may be computed, and a broken one falls back to the id.
+    assert Action("e", lambda: "Last 3 h", always.run).text() == "Last 3 h"
+    assert "Last 3 h" in Action("e", lambda: "Last 3 h", always.run, key="l").menu_label()
+
+    def boom() -> str:
+        raise RuntimeError("no")
+
+    assert Action("logs.events", boom, always.run).text() == "logs.events"
     print("[OK] actions self-check passed")
 
 

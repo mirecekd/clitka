@@ -53,7 +53,7 @@ class ActionHost:
             f"region: {self.context.effective_region}"
         )
         self.app.push_screen(  # type: ignore[attr-defined]
-            ConfirmModal(f"{action.label}: {ref.type_name} '{ref.identifier}'?", detail),
+            ConfirmModal(f"{action.text()}: {ref.type_name} '{ref.identifier}'?", detail),
             lambda ok: self._start(action, ref) if ok else None,
         )
 
@@ -63,7 +63,7 @@ class ActionHost:
         The worker is deliberately NOT exclusive: an exclusive one would cancel
         the screen's own listing worker.
         """
-        self._title(f"{self.type_name}\n{action.label} - running...")
+        self._title(f"{self.type_name}\n{action.text()} - running...")
         self.run_worker(  # type: ignore[attr-defined]
             lambda: self._run(action, ref), thread=True, exclusive=False, group="action"
         )
@@ -81,7 +81,7 @@ class ActionHost:
         self._after_action(result.reload)
 
     def _action_failed(self, action: act.Action, exc: Exception) -> None:
-        self._title(f"{self.type_name}\n[ERROR] {action.label}: {exc}")
+        self._title(f"{self.type_name}\n[ERROR] {action.text()}: {exc}")
 
 
 def _self_check() -> None:
