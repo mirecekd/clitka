@@ -23,6 +23,7 @@ from typing import Any
 
 from clitka.core.context import Context
 from clitka.core.errors import ClitkaError, wrap_aws_errors
+from clitka.core.resname import name_of
 
 _PAGE = 100
 # ponytail: types the API cannot enumerate are discovered by failing the call,
@@ -52,9 +53,25 @@ class Resource:
     identifier: str
     properties: dict[str, Any]
 
+    def name(self) -> str:
+        """A human-readable name, or "" when the identifier is all there is.
+
+        An EC2 instance is the reason this exists: `i-0abc...` is not what anyone
+        recognises the machine by - the `Name` tag is (owner's request). The
+        guessing itself lives in `core/resname.py`.
+        """
+        return name_of(self.identifier, self.properties)
+
     def row(self) -> dict[str, Any]:
-        """Flat row for the table: identifier first, then a few properties."""
+        """Flat row for the table: identifier, the name if there is one, then more.
+
+        `name` is a *derived* column, not a property - `previewmodel.resource_from`
+        drops it again so it never shows up in the Raw tab.
+        """
         row: dict[str, Any] = {"identifier": self.identifier}
+        name = self.name()
+        if name:
+            row["name"] = name
         for key, value in self.properties.items():
             if key not in row:
                 row[key] = value
@@ -187,15 +204,19 @@ def delete_resource(ctx: Context, type_name: str, identifier: str) -> dict[str, 
 
 
 def columns_for(resources: list[Resource], limit: int = 6) -> list[str]:
-    """Pick table columns: identifier plus the most common property keys.
+    """Pick table columns: identifier, `name` if any row has one, then the rest.
 
     Cloud Control returns a different property subset per type (and sometimes per
     resource), so the columns are derived from the data rather than declared.
+    `name` is put second on purpose: on EC2 the identifier alone is unreadable.
     """
     counts: dict[str, int] = {}
     for resource in resources:
         for key in resource.properties:
             counts[key] = counts.get(key, 0) + 1
+    head = ["identifier"]
+    if any(resource.name() for resource in resources):
+        head.append("name")
     ranked = sorted(counts, key=lambda key: (-counts[key], key))
-    chosen = [key for key in ranked if key != "identifier"][: max(limit - 1, 0)]
-    return ["identifier", *chosen]
+    chosen = [key for key in ranked if key not in head][: max(limit - len(head), 0)]
+    return [*head, *chosen]

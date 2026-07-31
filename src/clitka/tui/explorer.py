@@ -25,11 +25,12 @@ from clitka.tui.keybar import KeyBar
 from clitka.tui.restypes import COMMON_TYPES, EXPLORER_HELP, MAX_ROWS, PAGE_ROWS
 from clitka.tui.status import StatusBar
 from clitka.tui.table import ResourceTable
+from clitka.tui.viewedit import ViewEditHost
 
 __all__ = ["COMMON_TYPES", "MAX_ROWS", "PAGE_ROWS", "ExplorerScreen"]
 
 
-class ExplorerScreen(ActionHost, Screen[None]):
+class ExplorerScreen(ViewEditHost, ActionHost, Screen[None]):
     """One resource type at a time, in the generic table.
 
     `ActionHost` supplies the whole F9 flow; this screen only says what a row is
@@ -38,10 +39,13 @@ class ExplorerScreen(ActionHost, Screen[None]):
 
     BINDINGS = [
         Binding("f1", "help", "Help", show=False),
-        # F2/F3 are the app's, but a Screen shadows the App's bindings, so they
+        Binding("f3", "view", "View", show=False),
+        Binding("f4", "edit", "Edit", show=False),
+        # P/R/L are the app's, but a Screen shadows the App's bindings, so they
         # have to be forwarded explicitly or they would be dead inside here.
-        Binding("f2", "app.switch_profile", "Profile", show=False),
-        Binding("f3", "app.switch_region", "Region", show=False),
+        Binding("p,P", "app.switch_profile", "Profile", show=False),
+        Binding("r,R", "app.switch_region", "Region", show=False),
+        Binding("w,W", "app.switch_window", "Window", show=False),
         Binding("f5", "reload", "Refresh", show=False),
         Binding("f9", "actions", "Actions", show=False),
         Binding("f10", "quit", "Quit", show=False),
@@ -68,7 +72,8 @@ class ExplorerScreen(ActionHost, Screen[None]):
         self.reload()
 
     def adopt_context(self, context: Context) -> None:
-        """The app switched profile or region (F2/F3) - re-list against the new one."""
+        """The app switched profile or region (P/R) - re-list against the new one."""
+
         self.context = context
         self.query_one(StatusBar).set_context(context)
         self.reload()

@@ -32,6 +32,7 @@ from clitka.tui.status import StatusBar
 from clitka.tui.treeload import NOT_LOADED, BranchLoader
 from clitka.tui.treemodel import ResourceNode, TypeNode
 from clitka.tui.treesel import TreeSelection
+from clitka.tui.viewedit import ViewEditHost
 
 Payload = TypeNode | ResourceNode
 
@@ -40,9 +41,13 @@ Payload = TypeNode | ResourceNode
 # `_after_action`, which `ActionHost` declares abstract. Put ActionHost ahead of
 # it and the MRO picks the NotImplementedError stubs instead - F9 then dies on
 # every keypress.
-class ResourceTree(TreeSelection, ActionHost, BranchLoader, Screen[None]):
+class ResourceTree(TreeSelection, ViewEditHost, ActionHost, BranchLoader, Screen[None]):
     """The tree of resource types. F9 acts on the resource under the cursor."""
 
+    # Both panes are framed at ALL times and only the colour of the frame says
+    # who holds the keyboard - yellow ($warning) is the active one (owner's call,
+    # 2026-07-31). Drawing the border on focus only also moved the contents by a
+    # cell every time the focus changed.
     DEFAULT_CSS = """
     ResourceTree #tree-title {
         height: 1;
@@ -52,15 +57,20 @@ class ResourceTree(TreeSelection, ActionHost, BranchLoader, Screen[None]):
     ResourceTree Tree {
         height: 1fr;
         padding: 0 1;
+        border: round $panel;
     }
     ResourceTree #split {
         height: 1fr;
     }
     ResourceTree #tree-side {
         width: 1fr;
-        min-width: 30;
+        min-width: 32;
+    }
+    ResourceTree Tree:focus {
+        border: round $warning;
     }
     """
+
     BINDINGS = [
         # Textual binds enter to "select", which only posts a NodeSelected message
         # and expands nothing. `space` does toggle, but enter is what a user
@@ -69,10 +79,12 @@ class ResourceTree(TreeSelection, ActionHost, BranchLoader, Screen[None]):
         Binding("tab", "focus_preview", "Preview / tree", show=False, priority=True),
         Binding("t", "tail", "Live tail", show=False),
         Binding("f1", "help", "Help", show=False),
+        Binding("f3", "view", "View", show=False),
+        Binding("f4", "edit", "Edit", show=False),
         # A Screen shadows the App's bindings, so the app-wide keys are forwarded.
-        Binding("f2", "app.switch_profile", "Profile", show=False),
-        Binding("f3", "app.switch_region", "Region", show=False),
-        Binding("f4", "app.login", "Login", show=False),
+        Binding("p,P", "app.switch_profile", "Profile", show=False),
+        Binding("r,R", "app.switch_region", "Region", show=False),
+        Binding("w,W", "app.switch_window", "Window", show=False),
         Binding("f5", "reload", "Refresh", show=False),
         Binding("f9", "actions", "Actions", show=False),
         Binding("f10", "quit", "Quit", show=False),
