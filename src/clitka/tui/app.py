@@ -7,8 +7,13 @@ F1..F4 drop-down panels slide out from directly under the key that was pressed.
 Nothing here talks to AWS on the UI thread - the identity lookup runs in a thread
 worker so the app paints instantly even when the SSO token has expired.
 
-Everything that changes *who* we act as (F2 profile, F3 region, F4 sign in) is in
-`tui/appswitch.ContextSwitcher`, mixed in below.
+Everything that changes *who* we act as (P profile, R region) is in
+`tui/appswitch.ContextSwitcher`, mixed in below. Those moved off F2/F3 onto
+letters on 2026-07-31, which freed F3 for "view" and F4 for "edit".
+
+Signing in is **not** part of the TUI (owner's call, 2026-07-31): it is a shell
+job - `clitka auth login` - and F5 picks the fresh token up.
+
 """
 
 from __future__ import annotations
@@ -29,9 +34,10 @@ from clitka.tui.restree import ResourceTree
 from clitka.tui.restypes import TREE_TYPES
 from clitka.tui.status import StatusBar
 from clitka.tui.switch import type_names
+from clitka.tui.windowpick import WindowSwitcher
 
 
-class ClitkaApp(ContextSwitcher, App[None]):
+class ClitkaApp(ContextSwitcher, WindowSwitcher, App[None]):
     """Root application. One instance per process."""
 
     TITLE = "CLITKA"
@@ -40,12 +46,14 @@ class ClitkaApp(ContextSwitcher, App[None]):
         padding: 1 2;
     }
     """
+    # The context switches are letters now, upper and lower case alike (the
+    # owner's call): `p` profile, `r` region.
     BINDINGS = [
         Binding("colon", "palette", "Command palette", show=False),
         Binding("f1", "help", "Help", show=False),
-        Binding("f2", "switch_profile", "Profile", show=False),
-        Binding("f3", "switch_region", "Region", show=False),
-        Binding("f4", "login", "Login", show=False),
+        Binding("p,P", "switch_profile", "Profile", show=False),
+        Binding("r,R", "switch_region", "Region", show=False),
+        Binding("w,W", "switch_window", "Window", show=False),
         Binding("f5", "refresh", "Refresh", show=False),
         Binding("f10", "quit", "Quit", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -58,6 +66,12 @@ class ClitkaApp(ContextSwitcher, App[None]):
         # the tests that are about the shell itself, or a single explorer screen,
         # pass that.
         self.open_tree = open_tree
+        # The last resolved identity, kept on the app because EVERY screen
+        # composes its own StatusBar: a bar mounted after the lookup finished had
+        # no way to learn the answer and stayed on "(resolving)" for good.
+        # `None` means "not resolved yet" -> the bars show pending.
+        self.account: str | None = None
+        self.identity: str = ""
 
     def compose(self) -> ComposeResult:
         yield KeyBar()
@@ -77,7 +91,10 @@ class ClitkaApp(ContextSwitcher, App[None]):
     # --- identity ---------------------------------------------------------
 
     def refresh_identity(self) -> None:
-        """Resolve the caller identity off the UI thread."""
+        """Forget the resolved identity and resolve it again off the UI thread."""
+        self.account = None
+        self.identity = ""
+        self.paint_status()
         self.run_worker(self._load_identity, thread=True, exclusive=True)
 
     def _load_identity(self) -> None:
@@ -87,17 +104,36 @@ class ClitkaApp(ContextSwitcher, App[None]):
         self.call_from_thread(self._apply_identity, account, display)
 
     def _apply_identity(self, account: str, display: str) -> None:
-        bar = self.query_one(StatusBar)
-        bar.set_context(self.context)
-        if self.context.region is None:
+        self.account = account
+        self.identity = display
+        self.paint_status()
+
+    def paint_status(self) -> None:
+        """Bring EVERY mounted status bar up to date with the current context.
+
+        There is one bar per screen, not one per app, so this walks the whole
+        screen stack. A bar that mounts later calls this itself from `on_mount` -
+        that is the fix for a pushed screen sitting on "(resolving)" forever.
+        """
+        region = self.context.region
+        if region is None:
             # botocore may have resolved a region from the profile.
-            bar.set_region(self.context.effective_region)
-        bar.set_identity(account, display)
+            try:
+                region = self.context.effective_region
+            except Exception:
+                region = None
+        for screen in self.screen_stack:
+            for bar in screen.query(StatusBar):
+                bar.set_context(self.context)
+                bar.set_region(region)
+                if self.account is None:
+                    bar.set_pending()
+                else:
+                    bar.set_identity(self.account, self.identity)
 
     # --- actions ----------------------------------------------------------
 
     def action_refresh(self) -> None:
-        self.query_one(StatusBar).set_pending()
         self.refresh_identity()
 
     def action_help(self) -> None:

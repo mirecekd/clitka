@@ -5,7 +5,7 @@ the bar move around as screens change. CLITKA wants the opposite: the same
 slots always in the same place, so the bar is rendered from a fixed list and
 each screen only says which slots it actually enables.
 
-It is docked at the *top* so the drop-down panels (F1/F2/F3/F4) can slide out from
+It is docked at the *top* so the drop-down panels (F1, P, R, W) can slide out from
 
 directly underneath the slot that was pressed. The status bar sits at the bottom:
 the menu on top is "what I can do", the status below is "where I am".
@@ -16,11 +16,19 @@ from __future__ import annotations
 from textual.widgets import Static
 
 # (key label, action label). Order is fixed - muscle memory is the point.
+#
+# Revised 2026-07-31 on the owner's call: the context switches are letters
+# (P profile, R region, W time window - upper or lower case), which frees F3 and
+# F4 for what a resource screen actually needs: view and edit. Signing in is NOT
+# a slot: it is `clitka auth login` in a shell, then F5 here.
+
 SLOTS: tuple[tuple[str, str], ...] = (
     ("F1", "Help"),
-    ("F2", "Profile"),
-    ("F3", "Region"),
-    ("F4", "Login"),
+    ("P", "Profile"),
+    ("R", "Region"),
+    ("W", "Window"),
+    ("F3", "View"),
+    ("F4", "Edit"),
     ("F5", "Refresh"),
     ("F9", "Actions"),
     ("F10", "Quit"),
@@ -51,7 +59,7 @@ def render_bar(enabled: frozenset[str] | None = None, open_key: str | None = Non
 
 
 class KeyBar(Static):
-    """A fixed six-slot key legend docked at the top."""
+    """A fixed key legend docked at the top."""
 
     DEFAULT_CSS = """
     KeyBar {
@@ -94,11 +102,13 @@ def _self_check() -> None:
     partial = render_bar(frozenset({"F1", "F10"}))
     assert "[b]F1[/b]" in partial, partial
     assert "[dim]F9 Actions[/dim]" in partial, partial
-    opened = render_bar(open_key="F2")
-    assert "[reverse]F2 Profile[/reverse]" in opened, opened
+    opened = render_bar(open_key="P")
+    assert "[reverse]P Profile[/reverse]" in opened, opened
     assert "[b]F1[/b]" in opened, opened
-    # Textual reports "f1", the slots are labelled "F1".
+    # Textual reports "f1" and a bare "p"; the slots are labelled "F1" and "P".
     assert "[reverse]F1 Help[/reverse]" in render_bar(open_key="f1")
+    assert "[reverse]R Region[/reverse]" in render_bar(open_key="r")
+    assert "[reverse]W Window[/reverse]" in render_bar(open_key="w")
 
     print("[OK] key bar self-check passed")
 

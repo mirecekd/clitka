@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from textual.screen import Screen
 
 from clitka.core.context import Context, Identity
 from clitka.tui.app import ClitkaApp
@@ -37,23 +38,43 @@ def test_status_bar_renders_without_network():
 
 
 def test_key_bar_slots_are_fixed_and_dimmable():
-    assert [key for key, _ in SLOTS] == ["F1", "F2", "F3", "F4", "F5", "F9", "F10"]
+    """P/R/W are letters (owner's call, 2026-07-31); F3/F4 are view and edit.
+
+    There is no `L`: signing in was taken out of the TUI - `clitka auth login`.
+    """
+    assert [key for key, _ in SLOTS] == [
+        "F1",
+        "P",
+        "R",
+        "W",
+        "F3",
+        "F4",
+        "F5",
+        "F9",
+        "F10",
+    ]
 
     full = render_bar()
     assert "[b]F9[/b] Actions" in full
     assert "[b]F10[/b] Quit" in full
-    assert "[dim]F2 Profile[/dim]" in render_bar(frozenset({"F1", "F10"}))
+    assert "[b]F3[/b] View" in full
+    assert "[b]F4[/b] Edit" in full
+    assert "[b]W[/b] Window" in full
+    assert "[dim]P Profile[/dim]" in render_bar(frozenset({"F1", "F10"}))
 
 
 def test_key_bar_highlights_the_open_panel():
-    opened = render_bar(open_key="F2")
-    assert "[reverse]F2 Profile[/reverse]" in opened
-    assert "[b]F3[/b] Region" in opened
+    opened = render_bar(open_key="P")
+    assert "[reverse]P Profile[/reverse]" in opened
+    assert "[b]R[/b] Region" in opened
     bar = KeyBar()
     bar.set_open("F1")
     assert "[reverse]F1 Help[/reverse]" in bar.line()
     bar.set_open(None)
     assert "[b]F1[/b] Help" in bar.line()
+    # Textual reports a bare letter lowercase; the slot is labelled upper case.
+    bar.set_open("r")
+    assert "[reverse]R Region[/reverse]" in bar.line()
 
 
 @pytest.mark.asyncio
@@ -69,10 +90,38 @@ async def test_app_shows_context_in_the_status_bar(offline_context):
         assert bar.account == "1234-5678-9012"
         assert bar.identity == "mirek"
         assert "[b]F9[/b] Actions" in app.query_one(KeyBar).line()
+        assert "[b]P[/b] Profile" in app.query_one(KeyBar).line()
+
+
+@pytest.mark.asyncio
+async def test_a_screen_pushed_later_gets_the_resolved_account(offline_context):
+    """Every screen composes its own StatusBar, and it must not say "(resolving)".
+
+    The identity is resolved once, on a worker; a bar mounted after that had no
+    way to learn the answer and used to sit on "(resolving)" for good.
+    """
+    app = ClitkaApp(offline_context, open_tree=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        class BarScreen(Screen[None]):
+            def compose(self):
+                yield StatusBar(offline_context)
+
+        app.push_screen(BarScreen())
+
+        await pilot.pause()
+        bar = app.screen.query_one(StatusBar)
+        assert bar.account == "1234-5678-9012", bar.line()
+        assert bar.identity == "mirek"
+        assert bar.profile == "demo"
 
 
 @pytest.mark.asyncio
 async def test_f1_drops_the_help_panel_and_f1_closes_it(offline_context):
+
     app = ClitkaApp(offline_context, open_tree=False)
     async with app.run_test() as pilot:
         await pilot.press("f1")

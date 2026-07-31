@@ -1,12 +1,16 @@
 """`ContextSwitcher`: everything that changes *who* CLITKA is acting as.
 
-F2 (profile), F3 (region) and F4 (sign in) all end in the same place - a new
-`Context`, a repainted status bar and every screen told to re-list itself - so
-they live together, mixed into `ClitkaApp`. Split out of `tui/app.py` to keep both
-files under 8 kB; the seam is real: `app.py` is the shell, this is the identity.
+P (profile) and R (region) both end in the same place - a new `Context`, a
+repainted status bar and every screen told to re-list itself - so they live
+together, mixed into `ClitkaApp`. Split out of `tui/app.py` to keep both files
+under 8 kB; the seam is real: `app.py` is the shell, this is the identity.
 
 The switches are in-memory only, by the owner's explicit call. `clitka ctx use`
 remains the only thing that writes `~/.config/clitka/config.toml`.
+
+**Signing in is deliberately NOT here** (owner's call, 2026-07-31): the TUI has
+no login panel at all. An expired login is reported with the shell command that
+fixes it (`clitka auth login`), and `F5` picks the new token up.
 """
 
 from __future__ import annotations
@@ -15,8 +19,6 @@ from clitka.core.awsconfig import load_aws_config
 from clitka.core.context import Context
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.dropmenu import DropMenu
-from clitka.tui.logindrop import LoginDrop
-from clitka.tui.status import StatusBar
 from clitka.tui.switch import (
     PROFILE_HINT,
     PROFILE_TITLE,
@@ -32,24 +34,24 @@ class ContextSwitcher:
 
     context: Context
 
-    # --- F2 / F3 ----------------------------------------------------------
+    # --- P / R ------------------------------------------------------------
 
     def action_switch_profile(self) -> None:
-        """F2: drop the profile list out from under the menu bar."""
+        """P: drop the profile list out from under the menu bar."""
         self._drop(
             PROFILE_TITLE,
             profile_items(load_aws_config(), self.context.profile),
-            "f2",
+            "p",
             PROFILE_HINT,
             self._profile_chosen,
         )
 
     def action_switch_region(self) -> None:
-        """F3: drop the region list out from under the menu bar."""
+        """R: drop the region list out from under the menu bar."""
         self._drop(
             REGION_TITLE,
             region_items(self._regions(), self.context.effective_region),
-            "f3",
+            "r",
             REGION_HINT,
             self._region_chosen,
         )
@@ -90,47 +92,29 @@ class ContextSwitcher:
         self.context = self.context.with_region(region)
         self._context_changed()
 
-    # --- F4: sign in ------------------------------------------------------
-
-    def action_login(self) -> None:
-        """F4: run the SSO device flow right here, then refresh everything."""
-        self.push_screen(LoginDrop(self.context), self._logged_in)  # type: ignore[attr-defined]
-
-    def offer_login(self, why: str = "") -> None:
-        """A screen hit an expired login - open the panel for it, once."""
-        if any(isinstance(screen, LoginDrop) for screen in self.screen_stack):  # type: ignore[attr-defined]
-            return
-        drop = LoginDrop(self.context)
-        if why:
-            drop.lines.insert(0, f"[dim]{why}[/dim]")
-        self.push_screen(drop, self._logged_in)  # type: ignore[attr-defined]
-
-    def _logged_in(self, ok: object) -> None:
-        if ok:
-            # The old session still holds the credential resolver that failed.
-            self.context = self.context.renewed()
-            self._context_changed()
-
     # --- the one place a context change is announced ----------------------
 
     def _context_changed(self) -> None:
-        """Repaint the status bar, re-resolve the identity, reload the screens."""
-        bar = self.query_one(StatusBar)  # type: ignore[attr-defined]
-        bar.set_context(self.context)
-        bar.set_pending()
-        self.refresh_identity()  # type: ignore[attr-defined]
+        """Repaint every status bar, re-resolve the identity, reload the screens."""
         for screen in self.screen_stack:  # type: ignore[attr-defined]
             adopt = getattr(screen, "adopt_context", None)
             if adopt is not None:
                 adopt(self.context)
+        # Last, on purpose: `refresh_identity` clears the cached account, repaints
+        # every bar (there is one per screen) and starts the worker. A screen's
+        # `adopt_context` touches its own bar, so it must run first or it would
+        # undo the repaint.
+        self.refresh_identity()  # type: ignore[attr-defined]
 
 
 def _self_check() -> None:
     """The contract: the mixin supplies exactly these actions and no state."""
-    for name in ("action_switch_profile", "action_switch_region", "action_login"):
+    for name in ("action_switch_profile", "action_switch_region"):
         assert callable(getattr(ContextSwitcher, name)), name
-    assert callable(ContextSwitcher.offer_login)
     assert callable(ContextSwitcher._context_changed)
+    # Login was removed from the TUI on purpose - it belongs to `clitka auth`.
+    assert not hasattr(ContextSwitcher, "action_login")
+    assert not hasattr(ContextSwitcher, "offer_login")
 
     # `_regions` must never raise, even on a profile that cannot build a session.
     class Fake(ContextSwitcher):

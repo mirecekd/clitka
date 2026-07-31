@@ -1,4 +1,4 @@
-"""F2/F3 switching and the `:` palette's type list. No AWS calls - all fixtures."""
+"""P/R switching and the `:` palette's type list. No AWS calls - all fixtures."""
 
 from __future__ import annotations
 
@@ -72,14 +72,14 @@ def test_region_items_are_sorted_with_the_active_one_marked():
 
 
 @pytest.mark.asyncio
-async def test_f2_drops_the_profile_menu_and_switches_the_context(offline):
+async def test_p_drops_the_profile_menu_and_switches_the_context(offline):
     app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
-        await pilot.press("f2")
+        await pilot.press("p")
         await pilot.pause()
         menu = app.screen
         assert isinstance(menu, DropMenu)
-        assert "[reverse]F2 Profile[/reverse]" in app.query_one(KeyBar).line()
+        assert "[reverse]P Profile[/reverse]" in app.query_one(KeyBar).line()
         # The cursor starts on the active profile; move down to "trask".
         assert [i.value for i in menu.matches][1] == "sw-sandbox"
         await pilot.press("down")
@@ -90,14 +90,14 @@ async def test_f2_drops_the_profile_menu_and_switches_the_context(offline):
 
         assert app.context.profile == "trask"
         assert app.query_one(StatusBar).profile == "trask"
-        assert "[b]F2[/b] Profile" in app.query_one(KeyBar).line()
+        assert "[b]P[/b] Profile" in app.query_one(KeyBar).line()
 
 
 @pytest.mark.asyncio
-async def test_f3_drops_the_region_menu_and_switches_the_context(offline):
+async def test_r_drops_the_region_menu_and_switches_the_context(offline):
     app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
-        await pilot.press("f3")
+        await pilot.press("r")
         await pilot.pause()
         assert isinstance(app.screen, DropMenu)
         await pilot.press("down")
@@ -114,7 +114,7 @@ async def test_f3_drops_the_region_menu_and_switches_the_context(offline):
 async def test_escaping_the_profile_menu_changes_nothing(offline):
     app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
-        await pilot.press("f2")
+        await pilot.press("p")
         await pilot.pause()
         await pilot.press("escape")
         await pilot.pause()
@@ -126,7 +126,7 @@ async def test_picking_the_active_profile_again_is_a_no_op(offline):
     app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
         before = app.context
-        await pilot.press("f2")
+        await pilot.press("p")
         await pilot.pause()
         await pilot.press("enter")  # cursor sits on the active one
         await pilot.pause()
@@ -139,7 +139,7 @@ async def test_an_empty_profile_list_explains_itself_instead_of_crashing(offline
 
     app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
-        await pilot.press("f2")
+        await pilot.press("p")
         await pilot.pause()
         panel = app.screen
         assert isinstance(panel, TextDrop)
@@ -148,16 +148,16 @@ async def test_an_empty_profile_list_explains_itself_instead_of_crashing(offline
 
 @pytest.mark.asyncio
 async def test_switching_the_profile_does_not_touch_the_saved_config(offline, monkeypatch):
-    """F2 is session-only by the owner's explicit call - nothing is persisted."""
+    """P is session-only by the owner's explicit call - nothing is persisted."""
     from clitka.core import clitkaconfig
 
     def boom(*_args, **_kwargs):
-        raise AssertionError("F2 must not write the CLITKA config")
+        raise AssertionError("P must not write the CLITKA config")
 
     monkeypatch.setattr(clitkaconfig, "save", boom, raising=False)
     app = ClitkaApp(offline, open_tree=False)
     async with app.run_test() as pilot:
-        await pilot.press("f2")
+        await pilot.press("p")
         await pilot.pause()
         await pilot.press("down")
         await pilot.press("enter")

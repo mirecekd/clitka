@@ -51,6 +51,17 @@ class StatusBar(Static):
         if context is not None:
             self.set_context(context)
 
+    def on_mount(self) -> None:
+        """Ask the app to fill in what it already knows.
+
+        Every screen composes its own bar, so a bar that mounts *after* the
+        identity lookup has finished has no other way to learn the answer - it
+        used to sit on "(resolving)" for the rest of the session.
+        """
+        paint = getattr(self.app, "paint_status", None)
+        if paint is not None:
+            paint()
+
     def set_context(self, context: Context) -> None:
         """Fill in what is known without making a network call."""
         self.profile = context.profile or "(default)"

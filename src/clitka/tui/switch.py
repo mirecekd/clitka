@@ -1,4 +1,5 @@
-"""What the F2 (profile), F3 (region) and `:` (type) choosers are filled with.
+"""What the P (profile), R (region) and `:` (type) choosers are filled with.
+
 
 
 The list building is plain functions over already-loaded data so it can be tested
@@ -19,8 +20,9 @@ from clitka.core.awsconfig import AwsConfig
 from clitka.core.context import Context
 from clitka.tui.dropdown import MenuItem
 
-PROFILE_TITLE = "F2  Switch profile - this session only"
-REGION_TITLE = "F3  Switch region - this session only"
+PROFILE_TITLE = "P  Switch profile - this session only"
+REGION_TITLE = "R  Switch region - this session only"
+
 
 # `clitka ctx use` is the way to make a choice stick, so say so.
 PROFILE_HINT = "session only - use `clitka ctx use <profile>` to make it the default"
