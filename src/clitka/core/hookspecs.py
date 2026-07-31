@@ -35,3 +35,7 @@ class ClitkaSpec:
     @hookspec
     def clitka_actions(self) -> list[Any]:
         """Return Action objects offered in the F9 context menu."""
+
+    @hookspec
+    def clitka_previews(self) -> list[Any]:
+        """Return PreviewTab objects for the detail pane beside the tree."""

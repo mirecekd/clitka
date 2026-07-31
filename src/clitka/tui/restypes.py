@@ -84,8 +84,9 @@ Cloud Control actually returned for this type, so they differ from type to type.
 
 
 TREE_HELP = """\
-The landing screen is a tree of resource types. Nothing is fetched until you open
-a branch, and what is fetched appears while it loads.
+The screen is split: the tree of resource types on the left, a preview of what you
+picked on the right. Nothing is fetched until you open a branch, and what is
+fetched appears while it loads.
 
 Moving around
 
@@ -98,11 +99,23 @@ Opening and closing
   right / left     open / close without moving off the node
   :                add any other resource type as a new branch
 
+The preview
+
+  enter            on a *resource*: show it in the pane on the right
+  tab              move between the tree and the preview, and back
+
+Only enter (or a mouse click) fills the preview - moving the cursor never calls
+AWS, so you can scroll a long branch for free. The pane has an Overview of the
+grouped properties and a Raw tab with the API response; a service can add tabs of
+its own, such as the last log events of a log group.
+
 Doing things
 
   F1   this help (F1 or escape closes it)
   F2   switch profile - everything loaded is dropped, reopen to refetch
   F3   switch region  - the same
+  F4   sign in - runs the SSO device flow here when the login has expired
+
   F5   collapse everything and forget it (this is also the retry after an error)
   F9   actions for the highlighted resource (a type branch has none)
   F10  quit

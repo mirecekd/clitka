@@ -1,12 +1,14 @@
-"""The landing screen: a tree of resource types that expand into their resources.
+"""The landing screen: a tree of resource types beside a preview of what is picked.
 
-The owner's model (2026-07-30): the screen lists only the *interesting* types.
-Open one and its resources unfold underneath, loaded on demand and appearing page
-by page; close it and they fold away but are kept. Anything not on the list is one
-`:` away and is then added as a further branch.
+The owner's model: 1/3 tree on the left, 2/3 detail on the right. The tree lists
+only the *interesting* types; open one and its resources unfold underneath, loaded
+on demand and appearing page by page; close it and they fold away but are kept.
+Anything not on the list is one `:` away and is then added as a further branch.
+Pressing enter on a resource previews it - moving the cursor never fetches.
 
-`BranchLoader` does the fetching, `ActionHost` does F9. This file is the keyboard
-and the layout.
+Three mixins do the work: `BranchLoader` fetches, `TreeSelection` answers "what is
+picked" and fills the preview, `ActionHost` is the whole F9 flow. This file is the
+layout and the keyboard.
 """
 
 from __future__ import annotations
@@ -15,24 +17,30 @@ from collections.abc import Sequence
 
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Static, Tree
 from textual.widgets.tree import TreeNode
 
-from clitka.core import actions as act
 from clitka.core.context import Context
 from clitka.tui.actionhost import ActionHost
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import KeyBar
+from clitka.tui.preview import PreviewPane
 from clitka.tui.restypes import TREE_HELP, TREE_TYPES
 from clitka.tui.status import StatusBar
 from clitka.tui.treeload import NOT_LOADED, BranchLoader
 from clitka.tui.treemodel import ResourceNode, TypeNode
+from clitka.tui.treesel import TreeSelection
 
 Payload = TypeNode | ResourceNode
 
 
-class ResourceTree(ActionHost, BranchLoader, Screen[None]):
+# `TreeSelection` comes FIRST: it supplies `selected_ref` / `_title` /
+# `_after_action`, which `ActionHost` declares abstract. Put ActionHost ahead of
+# it and the MRO picks the NotImplementedError stubs instead - F9 then dies on
+# every keypress.
+class ResourceTree(TreeSelection, ActionHost, BranchLoader, Screen[None]):
     """The tree of resource types. F9 acts on the resource under the cursor."""
 
     DEFAULT_CSS = """
@@ -45,12 +53,20 @@ class ResourceTree(ActionHost, BranchLoader, Screen[None]):
         height: 1fr;
         padding: 0 1;
     }
+    ResourceTree #split {
+        height: 1fr;
+    }
+    ResourceTree #tree-side {
+        width: 1fr;
+        min-width: 30;
+    }
     """
     BINDINGS = [
         # Textual binds enter to "select", which only posts a NodeSelected message
         # and expands nothing. `space` does toggle, but enter is what a user
         # reaches for, so it is claimed here.
-        Binding("enter", "toggle", "Open / close", show=False, priority=True),
+        Binding("enter", "toggle", "Open / preview", show=False, priority=True),
+        Binding("tab", "focus_preview", "Preview / tree", show=False, priority=True),
         Binding("f1", "help", "Help", show=False),
         # A Screen shadows the App's bindings, so the app-wide keys are forwarded.
         Binding("f2", "app.switch_profile", "Profile", show=False),
@@ -75,7 +91,10 @@ class ResourceTree(ActionHost, BranchLoader, Screen[None]):
         tree: Tree[Payload] = Tree("Resources", id="resource-tree")
         tree.show_root = False
         tree.guide_depth = 3
-        yield tree
+        with Horizontal(id="split"):
+            with Vertical(id="tree-side"):
+                yield tree
+            yield PreviewPane(self.context)
         yield StatusBar(self.context)
 
     def on_mount(self) -> None:
@@ -142,46 +161,11 @@ class ResourceTree(ActionHost, BranchLoader, Screen[None]):
         """F2/F3 switched profile or region - everything loaded is now stale."""
         self.context = context
         self.query_one(StatusBar).set_context(context)
+        self.preview.adopt_context(context)
+        self.preview.show(None)
         self.action_reload()
 
-    # --- what F9 acts on --------------------------------------------------
-
-    @property
-    def type_name(self) -> str:
-        """`ActionHost` uses this for its headings."""
-        data = self._selected()
-        if isinstance(data, ResourceNode | TypeNode):
-            return data.type_name
-        return "Resources"
-
-    def _selected(self) -> Payload | None:
-        node = self.rtree.cursor_node
-        return None if node is None else node.data
-
-    def selected_ref(self) -> act.ResourceRef | None:
-        """Only a leaf is a resource; a type branch has nothing to act on."""
-        data = self._selected()
-        if not isinstance(data, ResourceNode):
-            return None
-        return act.ResourceRef.from_row(data.type_name, data.resource.row())
-
-    def _after_action(self, reload: bool) -> None:
-        if reload:
-            self.action_reload_branch()
-        else:
-            self._title(self.type_name)
-
     # --- actions ----------------------------------------------------------
-
-    def action_toggle(self) -> None:
-        """enter: open or close the type under the cursor.
-
-        A leaf is left alone, so enter on a resource stays free for a future
-        details screen; F9 is what acts on one today.
-        """
-        node = self.rtree.cursor_node
-        if node is not None and isinstance(node.data, TypeNode):
-            node.toggle()
 
     def action_reload(self) -> None:
         """F5: fold everything and forget it - the next open refetches."""

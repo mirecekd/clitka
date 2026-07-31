@@ -60,6 +60,11 @@ def actions() -> list[Any]:
     return [action for group in get_manager().hook.clitka_actions() for action in group]
 
 
+def previews() -> list[Any]:
+    """Flatten preview tabs from all services."""
+    return [tab for group in get_manager().hook.clitka_previews() for tab in group]
+
+
 def _self_check() -> None:
     pm = get_manager()
     assert pm.project_name == HOOK_NAMESPACE
