@@ -41,7 +41,7 @@ class PreviewTab:
 
     def matches_type(self, type_name: str) -> bool:
         """Convenience for the common case of "only for this one type"."""
-        return self.applies_to(ResourceRef(type_name=type_name, identifier=""))
+        return self.applies_to(ResourceRef(type_name, ""))
 
 
 def for_type(type_name: str) -> Callable[[ResourceRef], bool]:
