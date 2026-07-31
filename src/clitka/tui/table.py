@@ -23,6 +23,9 @@ from clitka.tui.tablemodel import Row, TableModel, cell_text
 class ResourceTable(Vertical):
     """A filterable, sortable table of AWS resources."""
 
+    # The rows are framed at ALL times and the frame only turns yellow
+    # ($warning) when they hold the keyboard - the same rule as the tree and the
+    # preview pane (owner's call, 2026-07-31).
     DEFAULT_CSS = """
     ResourceTable Input.filter {
         display: none;
@@ -40,6 +43,10 @@ class ResourceTable(Vertical):
     }
     ResourceTable DataTable {
         height: 1fr;
+        border: round $panel;
+    }
+    ResourceTable DataTable:focus {
+        border: round $warning;
     }
     """
     BINDINGS = [

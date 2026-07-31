@@ -194,7 +194,52 @@ async def test_a_failing_tab_shows_the_error_instead_of_crashing(offline, monkey
         assert "[ERROR]" in body and "AccessDenied" in body
 
 
+@pytest.mark.asyncio
+async def test_the_visible_tab_scrolls_from_the_keyboard(offline, monkeypatch):
+    """The owner's report: in the Events tab pgdn/pgup and the arrows did nothing.
+
+    Two causes, both fixed: the pane scrolled the *first* VerticalScroll (Overview,
+    because only the inactive TabPane is hidden, not the scroll inside it), and
+    page up/down were not bound at all while the tab strip held the focus.
+    """
+    long_text = "\n".join(f"line {index}" for index in range(400))
+    tab = pv.PreviewTab(
+        "logs.events", "Events", lambda *_a: long_text, applies_to=pv.for_type(TYPE)
+    )
+
+    monkeypatch.setattr(pv, "registered", lambda: [tab])
+
+    app = ClitkaApp(offline, open_tree=False)
+    async with app.run_test() as pilot:
+        app.push_screen(ResourceTree(offline, [TYPE]))
+        await _open_first_bucket(pilot, app)
+        await pilot.press("enter")  # preview bucket-one
+        await pilot.pause()
+        await pilot.press("tab")  # keyboard into the pane
+        await pilot.pause()
+        pane = app.screen.query_one(PreviewPane)
+        pane.query_one("#preview-tabs").active = pane._tab_id("logs.events")
+        await pilot.pause()
+
+        body = pane._body()
+        assert body is not None
+        assert body.parent is pane.query_one("#preview-tabs").active_pane, (
+            "the ACTIVE tab's scroll must be the one that moves"
+        )
+        await pilot.press("pagedown")
+        await pilot.pause()
+        assert body.scroll_offset.y > 0, "page down must move the visible tab"
+        moved = body.scroll_offset.y
+        await pilot.press("pageup")
+        await pilot.pause()
+        assert body.scroll_offset.y < moved
+        await pilot.press("end")
+        await pilot.pause()
+        assert body.scroll_offset.y > moved
+
+
 def test_a_lazy_tab_shows_a_placeholder_first():
+
     assert "loading" in BUILDING
 
 

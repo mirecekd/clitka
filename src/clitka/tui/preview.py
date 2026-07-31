@@ -23,56 +23,31 @@ from clitka.core import preview as pv
 from clitka.core.actions import ResourceRef
 from clitka.core.context import Context
 from clitka.tui import previewmodel as pm
+from clitka.tui.previewkeys import PANE_BINDINGS, PANE_CSS, PaneKeys
 
 EMPTY = "[dim]Press enter on a resource to preview it.[/dim]"
 BUILDING = "[dim]loading...[/dim]"
 
 
-# A plugin namespaces its tab ids with a dot, which Textual refuses in a widget
-# id; `pm.slug` is what makes them legal. Re-exported for the tests.
+# Both live in `previewmodel` (no Textual there, so they are testable on their
+# own) and are re-exported here, which is where the tests and the pane look.
+# `pm.slug` is what makes a plugin's dotted tab id legal as a widget id.
 slug = pm.slug
+core_tabs = pm.core_tabs
 
 
-def core_tabs() -> list[pv.PreviewTab]:
-    """The two tabs every resource gets, built from what the tree already has."""
-    return [
-        pv.PreviewTab(
-            pv.OVERVIEW,
-            "Overview",
-            lambda _ctx, ref: pm.overview(_resource(ref)),
-            lazy=False,
-        ),
-        pv.PreviewTab(
-            pv.RAW,
-            "Raw",
-            lambda _ctx, ref: pm.raw_yaml(_resource(ref)),
-            lazy=False,
-        ),
-    ]
+class PreviewPane(PaneKeys, Vertical):
+    """The tabbed detail pane. `show(ref)` is what fills it.
 
-
-def _resource(ref: ResourceRef):
-    """Rebuild a `cc.Resource` from the row the tree carries - no API call."""
-    return pm.resource_from(ref.type_name, ref.identifier, ref.row)
-
-
-class PreviewPane(Vertical):
-    """The tabbed detail pane. `show(ref)` is what fills it."""
-
-    DEFAULT_CSS = """
-    PreviewPane {
-        width: 2fr;
-        border-left: solid $primary;
-    }
-    PreviewPane #preview-heading {
-        height: 1;
-        padding: 0 1;
-        color: $text-muted;
-    }
-    PreviewPane VerticalScroll {
-        padding: 0 1;
-    }
+    `PaneKeys` supplies the focus and the arrow keys - see `tui/previewkeys.py`.
     """
+
+    DEFAULT_CSS = PANE_CSS
+
+    # Inside the pane the arrows do what they look like they should: left/right
+    # walk the tab strip (that is `Tabs`' own binding, and it needs the strip to
+    # have the focus - see `PaneKeys.focus_pane`), up/down scroll the tab body.
+    BINDINGS = PANE_BINDINGS
 
     def __init__(self, context: Context) -> None:
         super().__init__()
@@ -144,6 +119,11 @@ class PreviewPane(Vertical):
         for tab in tabs:
             body = Static(BUILDING, id=self._body_id(tab.id))
             container.add_pane(TabPane(tab.label, VerticalScroll(body), id=self._tab_id(tab.id)))
+        # After a rebuild NOTHING is active: `clear_panes()` is deferred, and the
+        # `Tabs.Cleared` it eventually posts sets `active = ""` - *after* the new
+        # panes are in. So the first tab has to be selected once that has settled,
+        # or left/right do nothing on the first press and no tab looks current.
+        self.call_after_refresh(self.activate_first, self._tab_id(tabs[0].id))
 
     # --- building the visible tab ----------------------------------------
 

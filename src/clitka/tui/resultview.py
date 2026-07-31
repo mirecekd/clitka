@@ -49,8 +49,17 @@ class ResultScreen(Screen[None]):
             yield Static(self.result.body or "(no output)")
         yield StatusBar(self.context)
 
+    def on_mount(self) -> None:
+        """Hand the keyboard to the text.
+
+        Nothing was focused before, so page up/down and the arrows had nobody to
+        act on - the owner could only scroll with the mouse (report 2026-07-31).
+        `VerticalScroll` already binds all of them; it just needed the focus.
+        """
+        self.query_one("#result-body", VerticalScroll).focus()
+
     def heading(self) -> str:
-        return f"{self.result.title}  (escape to go back)"
+        return f"{self.result.title}  (escape to go back, page up/down to scroll)"
 
     def action_back(self) -> None:
         self.app.pop_screen()

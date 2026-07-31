@@ -86,7 +86,7 @@ def test_filter_box_appears_only_for_long_lists():
 async def test_drop_menu_returns_the_highlighted_value():
     app = Host()
     async with app.run_test() as pilot:
-        app.push_screen(DropMenu("Profile", ITEMS, "f2"), app.remember)
+        app.push_screen(DropMenu("Profile", ITEMS, "p"), app.remember)
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
@@ -98,7 +98,7 @@ async def test_drop_menu_returns_the_highlighted_value():
 async def test_drop_menu_single_key_shortcut_runs_the_item():
     app = Host()
     async with app.run_test() as pilot:
-        app.push_screen(DropMenu("Profile", ITEMS, "f2"), app.remember)
+        app.push_screen(DropMenu("Profile", ITEMS, "p"), app.remember)
         await pilot.pause()
         await pilot.press("t")
         await pilot.pause()
@@ -109,7 +109,7 @@ async def test_drop_menu_single_key_shortcut_runs_the_item():
 async def test_drop_menu_cursor_moves_down():
     app = Host()
     async with app.run_test() as pilot:
-        app.push_screen(DropMenu("Profile", ITEMS, "f2"), app.remember)
+        app.push_screen(DropMenu("Profile", ITEMS, "p"), app.remember)
         await pilot.pause()
         await pilot.press("down")
         await pilot.press("enter")
@@ -121,7 +121,7 @@ async def test_drop_menu_cursor_moves_down():
 async def test_escape_closes_the_panel_with_no_choice():
     app = Host()
     async with app.run_test() as pilot:
-        app.push_screen(DropMenu("Profile", ITEMS, "f2"), app.remember)
+        app.push_screen(DropMenu("Profile", ITEMS, "p"), app.remember)
         await pilot.pause()
         await pilot.press("escape")
         await pilot.pause()
@@ -132,9 +132,9 @@ async def test_escape_closes_the_panel_with_no_choice():
 async def test_the_opening_f_key_toggles_the_panel_shut():
     app = Host()
     async with app.run_test() as pilot:
-        app.push_screen(DropMenu("Profile", ITEMS, "f2"), app.remember)
+        app.push_screen(DropMenu("Profile", ITEMS, "p"), app.remember)
         await pilot.pause()
-        await pilot.press("f2")
+        await pilot.press("p")
         await pilot.pause()
     assert app.picked is None
 
@@ -143,12 +143,12 @@ async def test_the_opening_f_key_toggles_the_panel_shut():
 async def test_open_panel_highlights_its_slot_on_the_key_bar():
     app = Host()
     async with app.run_test() as pilot:
-        app.push_screen(DropMenu("Profile", ITEMS, "f2"), app.remember)
+        app.push_screen(DropMenu("Profile", ITEMS, "p"), app.remember)
         await pilot.pause()
-        assert "[reverse]F2 Profile[/reverse]" in app.query_one(KeyBar).line()
+        assert "[reverse]P Profile[/reverse]" in app.query_one(KeyBar).line()
         await pilot.press("escape")
         await pilot.pause()
-        assert "[b]F2[/b] Profile" in app.query_one(KeyBar).line()
+        assert "[b]P[/b] Profile" in app.query_one(KeyBar).line()
 
 
 @pytest.mark.asyncio
@@ -168,7 +168,7 @@ async def test_typing_in_the_filter_narrows_the_list_and_keys_are_literal():
     many = list(ITEMS) + [MenuItem(f"p{n}", f"p{n}") for n in range(FILTER_THRESHOLD)]
     app = Host()
     async with app.run_test() as pilot:
-        menu = DropMenu("Profile", many, "f2")
+        menu = DropMenu("Profile", many, "p")
         app.push_screen(menu, app.remember)
         await pilot.pause()
         # "t" is a shortcut for trask, but in the filter box it must just type.
