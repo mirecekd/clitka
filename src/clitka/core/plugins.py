@@ -11,7 +11,10 @@ import pluggy
 from clitka.core.hookspecs import ENTRY_POINT_GROUP, HOOK_NAMESPACE, ClitkaSpec
 
 # Built-in service modules, loaded in this order. Extend as milestones land.
-BUILTIN_SERVICES: tuple[str, ...] = ("clitka.services.resources",)
+BUILTIN_SERVICES: tuple[str, ...] = (
+    "clitka.services.resources",
+    "clitka.services.logs",
+)
 
 
 @lru_cache(maxsize=1)
