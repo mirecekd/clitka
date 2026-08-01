@@ -30,12 +30,11 @@ invoke, deploy, tail, exec, upload, execute.
 ## Status
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
-resource explorer, CloudWatch Logs, Lambda, ECR, EC2 and ECS work; the remaining
-per-service modules are being built milestone by milestone.
-
-
+resource explorer, CloudWatch Logs, Lambda, ECR, EC2, ECS and API Gateway work;
+the remaining per-service modules are being built milestone by milestone.
 
 What works today:
+
 
 ```bash
 clitka                               # TUI: the resource tree, F1 help, F10 quit
@@ -105,6 +104,29 @@ the task is still starting, it was never launched with `--enable-execute-command
 (which cannot be switched on afterwards), or its execute-command agent is not up
 because the task role is missing `ssmmessages:*`. All four beat reading
 `TargetNotConnectedException` on a bare terminal.
+
+```bash
+clitka apigw list                             # REST and HTTP APIs together
+clitka apigw list --kind HTTP                 # or just one protocol
+clitka apigw routes abc123                    # every method, path and authorizer
+clitka apigw routes abc123 --open             # only the ones with no authorizer
+clitka apigw stages abc123                    # nothing listed = never deployed
+clitka apigw invoke abc123 prod --path /pets  # a real request, through the edge
+clitka apigw invoke abc123 prod -X POST -b '{"name":"rex"}'
+clitka apigw invoke abc123 prod --sign        # SigV4, for an AWS_IAM route
+clitka apigw invoke abc123 prod --dry-run     # print the request, send nothing
+```
+
+API Gateway is **two unrelated AWS services behind one console page** - a REST API
+lives in `apigateway`, an HTTP or WebSocket one in `apigatewayv2` - and CLITKA
+hides that: one listing walks both, and every other command asks whichever half
+owns the id. `invoke` is the reason the plugin exists. `aws apigateway
+test-invoke-method` **bypasses the entire edge** (no authorizer, no stage variable,
+no WAF, REST only), so it answers a different question; this sends a real HTTP
+request to the real URL and **exits 1 on any non-2xx**, which is what makes it
+usable in a pipeline. It also explains the single most misleading message in AWS:
+a 403 saying `Missing Authentication Token` almost never means a missing token - it
+is what an *unmatched route* says.
 
 
 
@@ -219,7 +241,8 @@ Roadmap, in order:
 2. TUI shell and the generic resources explorer (Cloud Control API) (done)
 3. CloudWatch Logs, including live tail (done)
 4. Lambda (done), ECS exec and EC2 SSM (the `x` handoff, done), ECR (done),
-   EC2 start/stop/reboot (done), API Gateway invoke, Systems Manager
+   EC2 start/stop/reboot (done), API Gateway invoke (done), Systems Manager
+
 5. S3 browser and DynamoDB
 6. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
 7. Distribution: PyPI, standalone binaries, Docker image, plugin guide
@@ -237,12 +260,13 @@ Roadmap, in order:
 | ECR | repositories, images and tags, the untagged-image cleanup, `docker login` |
 | S3 | browse, upload/download with progress, edit an object in `$EDITOR` |
 | DynamoDB | tables, query/scan, item view and edit, PartiQL - **CLITKA's own addition**, the VS Code toolkit barely has this |
-| API Gateway | list APIs, resources, methods, **invoke** |
+| API Gateway | REST and HTTP APIs, routes, stages, **invoke through the real edge**, SigV4 signing |
 | CloudFormation | stacks, events with the failure reason highlighted, resources, template, drift |
 | Step Functions | state machines, start execution, execution history |
 | EventBridge Schemas | registries, schemas, code bindings |
 | Systems Manager | documents, Parameter Store |
 | SAM / CDK | wrappers around the official CLIs - never reimplemented |
+
 
 ## Design principles
 

@@ -18,6 +18,7 @@ BUILTIN_SERVICES: tuple[str, ...] = (
     "clitka.services.ecr",
     "clitka.services.ec2",
     "clitka.services.ecs",
+    "clitka.services.apigw",
 )
 
 

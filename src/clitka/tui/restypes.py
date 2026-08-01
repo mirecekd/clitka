@@ -24,6 +24,7 @@ COMMON_TYPES: tuple[str, ...] = (
     "AWS::Logs::LogGroup",
     "AWS::StepFunctions::StateMachine",
     "AWS::ApiGateway::RestApi",
+    "AWS::ApiGatewayV2::Api",
     "AWS::SNS::Topic",
     "AWS::SQS::Queue",
     "AWS::IAM::Role",
