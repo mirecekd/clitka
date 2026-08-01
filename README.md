@@ -30,8 +30,9 @@ invoke, deploy, tail, exec, upload, execute.
 ## Status
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
-resource explorer, CloudWatch Logs, Lambda and ECR work; the remaining per-service
-modules are being built milestone by milestone.
+resource explorer, CloudWatch Logs, Lambda, ECR and EC2 work; the remaining
+per-service modules are being built milestone by milestone.
+
 
 What works today:
 
@@ -72,6 +73,20 @@ clitka ecr login my-app                       # the `docker login` one-liner
 `ecr delete` always goes **by digest**, never by tag: deleting a tag would remove
 the image every other tag also points at, which is how people lose `latest` and
 `v3` in one keystroke.
+
+```bash
+clitka ec2 list                               # by Name tag, with state and IPs
+clitka ec2 list --state stopped               # only the ones costing nothing
+clitka ec2 get i-0abc1234                     # type, IPs, VPC, subnet, key, launch
+clitka ec2 stop i-0abc1234                    # asks first; --yes skips that
+clitka ec2 start i-0abc1234                   # and `reboot`
+```
+
+Every power command **reads the state first** and refuses in a sentence: starting
+an instance that is already running is a silent no-op at the API, and stopping one
+that is still `pending` is an error code. There is deliberately **no `terminate`** -
+it cannot be undone, so it stays a console job.
+
 
 The TUI is split: the tree of resource types on the left, a preview of what you
 picked on the right. Nothing is fetched until you open a branch - `enter` (or
@@ -184,7 +199,7 @@ Roadmap, in order:
 2. TUI shell and the generic resources explorer (Cloud Control API) (done)
 3. CloudWatch Logs, including live tail (done)
 4. Lambda (done), ECS exec and EC2 SSM (the `x` handoff, done), ECR (done),
-   API Gateway invoke, Systems Manager
+   EC2 start/stop/reboot (done), API Gateway invoke, Systems Manager
 5. S3 browser and DynamoDB
 6. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
 7. Distribution: PyPI, standalone binaries, Docker image, plugin guide
@@ -198,7 +213,7 @@ Roadmap, in order:
 | CloudWatch Logs | browse groups and streams, search, **live tail** |
 | Lambda | list, invoke, download/upload code, env vars, local invoke via `sam` |
 | ECS | clusters, services, tasks, **exec into a container** |
-| EC2 | instances, **SSM session**, port forwarding, start/stop |
+| EC2 | instances, **SSM session**, port forwarding, start / stop / reboot |
 | ECR | repositories, images and tags, the untagged-image cleanup, `docker login` |
 | S3 | browse, upload/download with progress, edit an object in `$EDITOR` |
 | DynamoDB | tables, query/scan, item view and edit, PartiQL - **CLITKA's own addition**, the VS Code toolkit barely has this |
