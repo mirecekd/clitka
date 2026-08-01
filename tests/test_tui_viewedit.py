@@ -48,14 +48,26 @@ def offline(monkeypatch):
     return Context(profile="demo", region="eu-central-1")
 
 
-async def _first_instance(pilot, app):
-    """Open the one branch and put the cursor on the first instance."""
+async def _first_instance(pilot, app, identifier: str = "i-0abc"):
+    """Open the one branch and put the cursor on `identifier`.
+
+    It seeks rather than pressing `down` once: the branch is sorted by what the
+    leaf leads with, so `web-01` (i-0abc) comes *after* the unnamed i-0def, and
+    "the first leaf" is not the one these tests are about.
+    """
     await pilot.pause()
     await pilot.press("enter")
     await app.workers.wait_for_complete()
     await pilot.pause()
-    await pilot.press("down")
-    await pilot.pause()
+
+    tree = app.screen.rtree
+    for index, line in enumerate(tree._tree_lines):
+        data = line.path[-1].data
+        if getattr(getattr(data, "resource", None), "identifier", None) == identifier:
+            tree.cursor_line = index
+            await pilot.pause()
+            return
+    raise AssertionError(f"{identifier} is not in the tree")
 
 
 # --- 1. the letter switches -----------------------------------------------

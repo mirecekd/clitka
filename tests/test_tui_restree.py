@@ -13,7 +13,7 @@ from clitka.core.context import Context, Identity
 from clitka.tui.app import ClitkaApp
 from clitka.tui.restree import ResourceTree
 from clitka.tui.restypes import MAX_ROWS, PAGE_ROWS, TREE_TYPES
-from clitka.tui.treemodel import ResourceNode, TypeNode, summarise
+from clitka.tui.treemodel import ResourceNode, TypeNode, sort_key, summarise
 
 TYPES = ["AWS::S3::Bucket", "AWS::Lambda::Function"]
 
@@ -70,6 +70,24 @@ def test_summarise_skips_the_identifier_and_empty_values():
 
 def test_a_leaf_without_an_identifier_still_has_a_label():
     assert ResourceNode("T", cc.Resource("T", "", {})).label() == "(no identifier)"
+
+
+def test_the_order_follows_the_name_the_leaf_leads_with():
+    """The owner's report: Lambda functions came back looking shuffled.
+
+    Cloud Control returns them in no useful order, and the leaf leads with the
+    *name*, so that is what the sort has to key on.
+    """
+    tagged = cc.Resource("T", "i-9", {"Tags": [{"Key": "Name", "Value": "alpha"}]})
+    plain = cc.Resource("T", "i-1", {})
+    assert sorted([plain, tagged], key=sort_key)[0] is tagged
+
+
+def test_the_order_ignores_case():
+    # Otherwise `Asrp-...` and `amplify-...` end up in two separate alphabets.
+    upper = cc.Resource("T", "Zeta", {})
+    lower = cc.Resource("T", "alpha", {})
+    assert sorted([upper, lower], key=sort_key)[0] is lower
 
 
 # --- the landing screen ---------------------------------------------------
@@ -163,6 +181,37 @@ async def test_each_branch_loads_on_its_own(ctx, listed):
         await pilot.pause()
         assert listed == [TREE_TYPES[0], TREE_TYPES[1]]
         assert _branch(screen, 1).is_expanded
+
+
+@pytest.mark.asyncio
+async def test_a_branch_stays_alphabetical_across_pages(ctx, monkeypatch):
+    """The owner's report, end to end: two pages arriving out of order.
+
+    The pages are merged in place with `add_leaf(before=...)`, so the branch is
+    sorted *while* it fills - not only once the last page lands.
+    """
+    shuffled = ["zulu", "alpha", "mike", "Bravo", "yankee", "charlie"]
+
+    def fake(_ctx, type_name, *_a, **_kw):
+        for name in shuffled:
+            yield cc.Resource(type_name, name, {})
+
+    monkeypatch.setattr(cc, "iter_resources", fake)
+    monkeypatch.setattr("clitka.tui.treeload.PAGE_ROWS", 2)
+
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        screen = await _tree(app, pilot)
+        await pilot.press("enter")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        branch = _branch(screen)
+        shown = [child.data.resource.identifier for child in branch.children]
+        assert shown == sorted(shuffled, key=str.casefold), shown
+        # And the payload list matches what is on screen, for F9's sake.
+        assert [one.identifier for one in branch.data.resources] == shown
 
 
 @pytest.mark.asyncio

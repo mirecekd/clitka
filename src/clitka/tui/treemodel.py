@@ -65,6 +65,20 @@ class ResourceNode:
         return f"{head}   [dim]{detail}[/dim]" if detail else head
 
 
+def sort_key(resource: cc.Resource) -> tuple[str, str]:
+    """How resources are ordered in a branch: by what the label leads with.
+
+    The leaf shows the **name** first and only falls back to the identifier, so
+    that is what the order has to follow - sorting by identifier would look
+    random next to a column of names. Case-insensitive, because a mixture of
+    `Asrp-...` and `amplify-...` otherwise splits into two alphabets, and the
+    identifier breaks the tie so the order is stable for two resources sharing
+    a name.
+    """
+    label = resource.name() or resource.identifier
+    return (label.casefold(), resource.identifier.casefold())
+
+
 def summarise(resource: cc.Resource, limit: int = 2) -> str:
     """A couple of the resource's own properties, for the leaf label.
 
@@ -111,6 +125,20 @@ def _self_check() -> None:
     assert "BucketName" not in leaf.label()
     bare = ResourceNode("T", cc.Resource("T", "", {}))
     assert bare.label() == "(no identifier)"
+
+    # The order follows the label, which leads with the name where there is one.
+    def made(identifier: str, **props: object) -> cc.Resource:
+        return cc.Resource("T", identifier, dict(props))
+
+    named = made("i-3", Tags=[{"Key": "Name", "Value": "beta"}])
+    unordered = [made("i-1"), named, made("i-2")]
+    ordered = [one.identifier for one in sorted(unordered, key=sort_key)]
+    # i-3 sorts under "beta", its Name tag - which is what its leaf leads with -
+    # so it comes first, not third. Sorting by identifier would put it last.
+    assert ordered == ["i-3", "i-1", "i-2"], ordered
+    # Case must not split the list into two alphabets.
+    mixed = [made("Zeta"), made("alpha")]
+    assert [one.identifier for one in sorted(mixed, key=sort_key)] == ["alpha", "Zeta"]
 
     # An EC2 instance leads with its Name tag, not with the instance id.
     ec2 = ResourceNode(

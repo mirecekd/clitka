@@ -18,7 +18,7 @@ from textual.worker import get_current_worker
 from clitka.core import cloudcontrol as cc
 from clitka.core.errors import ExpiredLoginError
 from clitka.tui.restypes import MAX_ROWS, PAGE_ROWS
-from clitka.tui.treemodel import ResourceNode, TypeNode
+from clitka.tui.treemodel import ResourceNode, TypeNode, sort_key
 
 NOT_LOADED = "[dim](not loaded)[/dim]"
 LOADING = "[dim]loading...[/dim]"
@@ -92,15 +92,41 @@ class BranchLoader:
         self.app.call_from_thread(self._done, branch, node)  # type: ignore[attr-defined]
 
     def _page(self, branch: TreeNode, node: TypeNode, found: list[cc.Resource]) -> None:
+        """Merge a page in, keeping the branch alphabetical (owner's report).
+
+        Cloud Control returns resources in no useful order, and appending each
+        page left the branch looking shuffled. The pages still arrive while the
+        user watches, so this inserts each resource where it belongs rather than
+        rebuilding: `add_leaf(before=...)` against the leaves already there.
+
+        ponytail: a linear scan per resource, so a page costs O(page x branch).
+        Ceiling: `MAX_ROWS` is 2000, which is instant. Upgrade path: `bisect` over
+        a kept list of keys.
+        """
         if not found:
             return
-        for resource in found:
+        for resource in sorted(found, key=sort_key):
             leaf = ResourceNode(node.type_name, resource)
-            branch.add_leaf(leaf.label(), data=leaf)
+            branch.add_leaf(leaf.label(), data=leaf, before=self._slot(branch, resource))
         self.drop_placeholders(branch)
         node.resources.extend(found)
+        node.resources.sort(key=sort_key)  # keep the payload in step with the screen
         node.count = len(node.resources)
         branch.set_label(node.label())
+
+    @staticmethod
+    def _slot(branch: TreeNode, resource: cc.Resource) -> TreeNode | None:
+        """The first leaf that sorts *after* `resource`, or None for the end.
+
+        Placeholders (`data is None`) are skipped - they are not resources, and
+        `sort_key` would have nothing to read on them.
+        """
+        key = sort_key(resource)
+        for child in branch.children:
+            data = child.data
+            if isinstance(data, ResourceNode) and sort_key(data.resource) > key:
+                return child
+        return None
 
     def _done(self, branch: TreeNode, node: TypeNode) -> None:
         node.loading = False
@@ -127,7 +153,7 @@ def _self_check() -> None:
     for text in (NOT_LOADED, LOADING, NONE_FOUND):
         assert text.startswith("[dim]") and text.endswith("[/dim]")
     # The contract: these are the four things a host screen must provide.
-    for name in ("placeholder", "drop_placeholders", "reset_branch", "load"):
+    for name in ("placeholder", "drop_placeholders", "reset_branch", "load", "_slot"):
         assert callable(getattr(BranchLoader, name))
     assert 0 < PAGE_ROWS < MAX_ROWS
     print("[OK] branch loader self-check passed")
