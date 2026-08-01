@@ -26,7 +26,7 @@ def payload_bytes(payload: str | bytes | None) -> bytes:
 
 
 def too_big(payload: str | bytes | None, asynchronous: bool = False) -> str:
-    """"" when the payload fits, otherwise why it does not."""
+    """ "" when the payload fits, otherwise why it does not."""
     size = len(payload_bytes(payload))
     ceiling = MAX_ASYNC_PAYLOAD if asynchronous else MAX_SYNC_PAYLOAD
     if size <= ceiling:
@@ -36,7 +36,7 @@ def too_big(payload: str | bytes | None, asynchronous: bool = False) -> str:
 
 
 def bad_json(payload: str | bytes | None) -> str:
-    """"" when the payload is JSON Lambda will accept, otherwise the complaint."""
+    """ "" when the payload is JSON Lambda will accept, otherwise the complaint."""
     raw = payload_bytes(payload)
     try:
         json.loads(raw.decode("utf-8"))

@@ -21,7 +21,6 @@ CLITKA is one tool with two faces:
   Keyboard-first, with a key menu bar on top, the profile / account / region
   status bar at the bottom, and `F9` for the actions of what is selected.
 
-
 - **CLI** - run `clitka <service> <verb>`. Every action available in the TUI is
   also a plain, scriptable command with `--output json|yaml|table`.
 
@@ -31,7 +30,7 @@ invoke, deploy, tail, exec, upload, execute.
 ## Status
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
-resource explorer, CloudWatch Logs and Lambda work; the remaining per-service
+resource explorer, CloudWatch Logs, Lambda and ECR work; the remaining per-service
 modules are being built milestone by milestone.
 
 What works today:
@@ -51,7 +50,6 @@ clitka resources delete AWS::S3::Bucket my-bkt
 clitka logs groups                            # log groups, size and retention
 clitka logs streams /aws/lambda/my-fn
 clitka logs search /aws/lambda/my-fn -f ERROR --since 3h
-
 clitka logs tail /aws/lambda/my-fn            # live tail, ctrl-c stops it
 
 clitka lambda list                            # every function in the region
@@ -62,6 +60,18 @@ clitka lambda invoke my-fn -D event.json      # ...or read the event from a file
 
 `lambda invoke` **exits non-zero when the handler raised**, even though AWS
 answers HTTP 200 for that - which is what makes it usable in a script.
+
+```bash
+clitka ecr repos                              # every repository in the region
+clitka ecr images my-app                      # newest push first, with scan verdict
+clitka ecr images my-app --untagged --digests # exactly what a cleanup removes
+clitka ecr delete my-app --untagged           # asks first; --yes skips that
+clitka ecr login my-app                       # the `docker login` one-liner
+```
+
+`ecr delete` always goes **by digest**, never by tag: deleting a tag would remove
+the image every other tag also points at, which is how people lose `latest` and
+`v3` in one keystroke.
 
 The TUI is split: the tree of resource types on the left, a preview of what you
 picked on the right. Nothing is fetched until you open a branch - `enter` (or
@@ -77,12 +87,12 @@ preview (the focused side is outlined), `F3` views the selected resource in full
 
 The preview has an Overview of the grouped properties and a Raw tab with the API
 response, and a service can add tabs of its own - a log group, for instance, gets
-an Events tab. How far back that tab looks is up to you: `W` drops a **time window**
-picker with presets from 5 minutes to a year, or a duration you type. Inside the
-preview the arrows do what they look like they should: `left`/`right` walk the tabs,
-`up`/`down` scroll one. Pressing `t` on a log group opens the **live tail**: events
-as they happen, `space` pauses, `w` wraps, `s` saves what is buffered to a file,
-`escape` stops the session.
+an Events tab, and an ECR repository gets its Images. How far back a time-based tab
+looks is up to you: `W` drops a **time window** picker with presets from 5 minutes
+to a year, or a duration you type. Inside the preview the arrows do what they look
+like they should: `left`/`right` walk the tabs, `up`/`down` scroll one. Pressing `t`
+on a log group opens the **live tail**: events as they happen, `space` pauses, `w`
+wraps, `s` saves what is buffered to a file, `escape` stops the session.
 
 `F1`, `P`, `R` and `W` drop a panel out from under the menu bar - help, switching
 the profile or region **for the running session**, and the time window. The letters
@@ -91,7 +101,6 @@ is deliberately **not** a screen: run `clitka auth login` (or `aws sso login`) i
 shell and press `F5` to pick the new token up. The status bar always names the
 CLITKA build plus the profile, account and region a call would use, and says
 READ-ONLY when writes are refused.
-
 
 ## Keyboard
 
@@ -163,7 +172,6 @@ It starts at `1h` and lasts for the running session only.
 | `s` | save the buffer to a file |
 | `escape` | stop the session and go back |
 
-
 Configuration precedence is `--profile/--region` flag, then `AWS_PROFILE` /
 `AWS_REGION`, then `~/.config/clitka/config.toml`, then the AWS defaults.
 CLITKA only reads `~/.aws/*`; its own settings go to its own file. The SSO token
@@ -175,8 +183,8 @@ Roadmap, in order:
 1. Auth and context - profiles, IAM Identity Center login, region switching (done)
 2. TUI shell and the generic resources explorer (Cloud Control API) (done)
 3. CloudWatch Logs, including live tail (done)
-4. Lambda (done), ECS exec and EC2 SSM (the `x` handoff), ECR, API Gateway
-   invoke, Systems Manager
+4. Lambda (done), ECS exec and EC2 SSM (the `x` handoff, done), ECR (done),
+   API Gateway invoke, Systems Manager
 5. S3 browser and DynamoDB
 6. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
 7. Distribution: PyPI, standalone binaries, Docker image, plugin guide
@@ -191,7 +199,7 @@ Roadmap, in order:
 | Lambda | list, invoke, download/upload code, env vars, local invoke via `sam` |
 | ECS | clusters, services, tasks, **exec into a container** |
 | EC2 | instances, **SSM session**, port forwarding, start/stop |
-| ECR | repositories, images, tags |
+| ECR | repositories, images and tags, the untagged-image cleanup, `docker login` |
 | S3 | browse, upload/download with progress, edit an object in `$EDITOR` |
 | DynamoDB | tables, query/scan, item view and edit, PartiQL - **CLITKA's own addition**, the VS Code toolkit barely has this |
 | API Gateway | list APIs, resources, methods, **invoke** |
