@@ -3,12 +3,12 @@
 The owner's model: 1/3 tree on the left, 2/3 detail on the right. The tree lists
 only the *interesting* types; open one and its resources unfold underneath, loaded
 on demand and appearing page by page; close it and they fold away but are kept.
-Anything not on the list is one `:` away and is then added as a further branch.
-Pressing enter on a resource previews it - moving the cursor never fetches.
+Anything not on the list is one `:` away. Pressing enter on a resource previews it
+- moving the cursor never fetches.
 
-Three mixins do the work: `BranchLoader` fetches, `TreeSelection` answers "what is
-picked" and fills the preview, `ActionHost` is the whole F9 flow. This file is the
-layout and the keyboard.
+The mixins do the work: `BranchLoader` fetches, `TreeSelection` answers "what is
+picked", `ActionHost` is F9, `ViewEditHost` F3/F4 and `ShellHost` the `x` handoff.
+This file is layout and keyboard only.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import KeyBar
 from clitka.tui.preview import PreviewPane
 from clitka.tui.restypes import TREE_HELP, TREE_TYPES
+from clitka.tui.shellhost import ShellHost
 from clitka.tui.status import StatusBar
 from clitka.tui.treeload import NOT_LOADED, BranchLoader
 from clitka.tui.treemodel import ResourceNode, TypeNode
@@ -41,13 +42,12 @@ Payload = TypeNode | ResourceNode
 # `_after_action`, which `ActionHost` declares abstract. Put ActionHost ahead of
 # it and the MRO picks the NotImplementedError stubs instead - F9 then dies on
 # every keypress.
-class ResourceTree(TreeSelection, ViewEditHost, ActionHost, BranchLoader, Screen[None]):
+class ResourceTree(TreeSelection, ViewEditHost, ShellHost, ActionHost, BranchLoader, Screen[None]):
     """The tree of resource types. F9 acts on the resource under the cursor."""
 
-    # Both panes are framed at ALL times and only the colour of the frame says
-    # who holds the keyboard - yellow ($warning) is the active one (owner's call,
-    # 2026-07-31). Drawing the border on focus only also moved the contents by a
-    # cell every time the focus changed.
+    # Both panes are framed at ALL times; only the frame's colour says who holds
+    # the keyboard - yellow ($warning) is active (owner's call, 2026-07-31).
+    # Bordering on focus only made the contents jump by a cell on every move.
     DEFAULT_CSS = """
     ResourceTree #tree-title {
         height: 1;
@@ -81,6 +81,7 @@ class ResourceTree(TreeSelection, ViewEditHost, ActionHost, BranchLoader, Screen
         Binding("f1", "help", "Help", show=False),
         Binding("f3", "view", "View", show=False),
         Binding("f4", "edit", "Edit", show=False),
+        Binding("x", "connect", "Shell", show=False),
         # A Screen shadows the App's bindings, so the app-wide keys are forwarded.
         Binding("p,P", "app.switch_profile", "Profile", show=False),
         Binding("r,R", "app.switch_region", "Region", show=False),

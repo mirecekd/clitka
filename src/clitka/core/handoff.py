@@ -15,23 +15,19 @@ What the throwaway PoC established (2026-08-01, `sw-sandbox`,
 - A missing binary raises `FileNotFoundError` **inside** the suspend block, which
   would otherwise leave the app suspended - hence `missing()`, checked *before*
   suspending, and the belt-and-braces `try` in `run()`.
-- Printing around the child is worth it: without a marker line the user cannot
-  tell whether the handoff happened at all.
 
 ponytail: we shell out to the `aws` CLI rather than reimplementing the Session
-Manager websocket protocol. Ceiling: the `aws` CLI (v2) and
-`session-manager-plugin` must be on PATH, and the profile is passed by name so
-the child resolves its own credentials - which also means an expired SSO login
-surfaces as the child's own error message, not ours. Upgrade path: boto3
-`start_session` plus feeding the response to the plugin directly, which is what
-the CLI does internally.
+Manager websocket protocol. Ceiling: `aws` (v2) and `session-manager-plugin` must
+be on PATH, and the profile is passed by name so the child resolves its own
+credentials - so an expired login surfaces as the child's message, not ours.
+Upgrade path: boto3 `start_session` feeding the plugin directly, as the CLI does.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from clitka.core.context import Context
 
@@ -192,22 +188,6 @@ def ecs_exec(
     )
 
 
-@dataclass
-class Recorder:
-    """Where a screen collects what it handed over - handy for the status line."""
-
-    entries: list[Outcome] = field(default_factory=list)
-
-    def run(self, handoff: Handoff) -> Outcome:
-        outcome = handoff.run()
-        self.entries.append(outcome)
-        return outcome
-
-    @property
-    def last(self) -> Outcome | None:
-        return self.entries[-1] if self.entries else None
-
-
 def _self_check() -> None:
     ctx = Context(profile="sw-sandbox", region="eu-central-1")
 
@@ -232,16 +212,11 @@ def _self_check() -> None:
     # A missing binary is reported *before* anything is suspended, and running it
     # anyway is still safe.
     nope = Handoff("nope", ["clitka-no-such-binary"], needs=("clitka-no-such-binary",))
-    assert nope.missing() == ["clitka-no-such-binary"]
-    assert "not on PATH" in nope.unavailable()
-    assert not nope.run().ok
+    assert "not on PATH" in nope.unavailable() and not nope.run().ok
 
     # And the happy path really runs a child process.
-    rec = Recorder()
-    good = rec.run(Handoff("true", ["true"], needs=("true",)))
+    good = Handoff("true", ["true"], needs=("true",)).run()
     assert good.ok and "finished" in good.summary(), good
-    assert rec.last is good and len(rec.entries) == 1
-
     bad = Handoff("false", ["false"], needs=("false",)).run()
     assert not bad.ok and "exited with 1" in bad.summary(), bad
     print("[OK] handoff self-check passed")

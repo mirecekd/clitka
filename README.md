@@ -31,8 +31,8 @@ invoke, deploy, tail, exec, upload, execute.
 ## Status
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
-resource explorer and CloudWatch Logs work; the remaining per-service modules are
-being built milestone by milestone.
+resource explorer, CloudWatch Logs and Lambda work; the remaining per-service
+modules are being built milestone by milestone.
 
 What works today:
 
@@ -53,7 +53,15 @@ clitka logs streams /aws/lambda/my-fn
 clitka logs search /aws/lambda/my-fn -f ERROR --since 3h
 
 clitka logs tail /aws/lambda/my-fn            # live tail, ctrl-c stops it
+
+clitka lambda list                            # every function in the region
+clitka lambda get my-fn                       # config, env vars, log group
+clitka lambda invoke my-fn -d '{"a": 1}'      # payload on stdout, logs on stderr
+clitka lambda invoke my-fn -D event.json      # ...or read the event from a file
 ```
+
+`lambda invoke` **exits non-zero when the handler raised**, even though AWS
+answers HTTP 200 for that - which is what makes it usable in a script.
 
 The TUI is split: the tree of resource types on the left, a preview of what you
 picked on the right. Nothing is fetched until you open a branch - `enter` (or
@@ -99,8 +107,8 @@ Everything, in one place. Letter keys take either case.
 | `R` | switch region - this session only |
 | `W` | time window - how far back the log preview and `F9` look |
 | `F3` | view the selected resource in full (`GetResource`), as YAML |
-
 | `F4` | edit the selected resource |
+| `x` | open a shell on it - an EC2 instance (SSM) or an ECS task (`ecs execute-command`). CLITKA steps aside for the session and comes back when you exit |
 | `F5` | refresh |
 | `F9` | actions for the selected resource |
 | `F10` / `q` | quit |
@@ -167,8 +175,8 @@ Roadmap, in order:
 1. Auth and context - profiles, IAM Identity Center login, region switching (done)
 2. TUI shell and the generic resources explorer (Cloud Control API) (done)
 3. CloudWatch Logs, including live tail (done)
-
-4. Lambda, ECS exec, EC2 SSM, ECR, API Gateway invoke, Systems Manager
+4. Lambda (done), ECS exec and EC2 SSM (the `x` handoff), ECR, API Gateway
+   invoke, Systems Manager
 5. S3 browser and DynamoDB
 6. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
 7. Distribution: PyPI, standalone binaries, Docker image, plugin guide

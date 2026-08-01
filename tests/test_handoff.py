@@ -13,7 +13,6 @@ from clitka.core.handoff import (
     PLUGIN,
     Handoff,
     Outcome,
-    Recorder,
     ecs_exec,
     ssm_port_forward,
     ssm_session,
@@ -104,15 +103,6 @@ def test_the_command_is_printable() -> None:
     made = ssm_session(ctx(), "i-abc")
     assert made.command().startswith("aws ssm start-session ")
     assert "i-abc" in made.command()
-
-
-def test_the_recorder_keeps_the_last_outcome() -> None:
-    rec = Recorder()
-    assert rec.last is None
-    first = rec.run(Handoff("true", ["true"], needs=("true",)))
-    second = rec.run(Handoff("false", ["false"], needs=("false",)))
-    assert rec.entries == [first, second]
-    assert rec.last is second
 
 
 def test_an_outcome_with_an_error_is_never_ok() -> None:

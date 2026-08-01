@@ -74,6 +74,7 @@ Doing things
 
   F3   view the highlighted resource in full (GetResource), as YAML
   F4   edit the highlighted resource
+  x    open a shell on it - an EC2 instance or an ECS task
   F5   reload the list
   F9   actions for the highlighted resource
   F10  quit
@@ -132,6 +133,8 @@ Doing things
 
   F3   view the highlighted resource in full (GetResource), as YAML
   F4   edit the highlighted resource
+  x    open a shell on it - an EC2 instance (SSM) or an ECS task (exec).
+       CLITKA steps aside for the session and comes back when you exit.
 
   F5   collapse everything and forget it (this is also the retry after an error)
   F9   actions for the highlighted resource (a type branch has none)
@@ -163,6 +166,8 @@ def _self_check() -> None:
         # The context switches are letters now - F2 must not be promised anywhere.
         assert "F2 " not in text, text
         assert "F3   view" in text or "F4   edit" in text, text
+        # The shell handoff has no menu-bar slot, so the help is its only home.
+        assert "\n  x    open a shell" in text, text
     assert "enter / space" in TREE_HELP
     assert "left / right" in TREE_HELP, "keyboard tab switching must be documented"
     for text in (EXPLORER_HELP, TREE_HELP):
