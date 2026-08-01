@@ -14,6 +14,7 @@ from clitka.core.hookspecs import ENTRY_POINT_GROUP, HOOK_NAMESPACE, ClitkaSpec
 BUILTIN_SERVICES: tuple[str, ...] = (
     "clitka.services.resources",
     "clitka.services.logs",
+    "clitka.services.lambdafn",
 )
 
 
