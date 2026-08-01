@@ -18,6 +18,7 @@ COMMON_TYPES: tuple[str, ...] = (
     "AWS::EC2::Instance",
     "AWS::EC2::VPC",
     "AWS::ECS::Cluster",
+    "AWS::ECS::Service",
     "AWS::ECR::Repository",
     "AWS::CloudFormation::Stack",
     "AWS::Logs::LogGroup",

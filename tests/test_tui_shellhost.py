@@ -64,20 +64,61 @@ def test_an_ec2_instance_opens_an_ssm_session():
     assert "--profile sw-sandbox" in host.ran[0]
 
 
-def test_an_ecs_task_opens_execute_command_with_the_cluster_from_its_arn():
+def test_an_ecs_task_opens_execute_command_with_the_cluster_from_its_arn(monkeypatch):
+    """Since the `ecs` plugin landed, `x` on a task describes it first.
+
+    So the opener is stubbed here: what this test still guards is that the ARN
+    reaches `shell_for` with the cluster worked out of it, and that the resulting
+    handoff is what gets handed over.
+    """
     arn = "arn:aws:ecs:eu-central-1:1:task/my-cluster/abc123"
+    seen: list[tuple[str, str, str]] = []
+
+    def fake(context, cluster, task, container="", command="/bin/sh"):
+        seen.append((cluster, task, container))
+        return sh.ho.ecs_exec(context, cluster, task, container=container, command=command)
+
+    monkeypatch.setattr("clitka.core.ecsrun.shell_for", fake)
     host = Recording(ref(sh.ECS_TASK, arn))
     host.action_connect()
+    assert seen == [("my-cluster", arn, "")], seen
     assert host.ran and "ecs execute-command" in host.ran[0]
     assert "--cluster my-cluster" in host.ran[0]
     assert "--interactive" in host.ran[0]
 
 
 def test_a_task_whose_cluster_cannot_be_worked_out_is_refused_with_a_sentence():
+    # No stub needed: this is refused before ECS is ever asked.
     host = Recording(ref(sh.ECS_TASK, "abc123"))
     host.action_connect()
     assert host.ran == []
     assert "cluster" in host.results[0][1]
+
+
+def test_a_live_refusal_from_ecs_reaches_the_user_as_a_sentence(monkeypatch):
+    """`refuses_exec` raises ValueError, and that has to be shown *in* the app.
+
+    This is the whole point of describing the task before suspending: otherwise
+    the user reads `TargetNotConnectedException` on a bare terminal.
+    """
+
+    def refuses(*_args, **_kwargs):
+        raise ValueError("this task was not started with execute-command enabled")
+
+    monkeypatch.setattr("clitka.core.ecsrun.shell_for", refuses)
+    arn = "arn:aws:ecs:eu-central-1:1:task/my-cluster/abc123"
+    host = Recording(ref(sh.ECS_TASK, arn))
+    host.action_connect()
+    assert host.ran == [], "nothing may be handed over when ECS refused"
+    assert "execute-command enabled" in host.results[0][1]
+
+
+def test_the_cluster_is_worked_out_before_ecs_is_asked():
+    arn = "arn:aws:ecs:eu-central-1:1:task/my-cluster/abc123"
+    assert sh.task_and_cluster(ref(sh.ECS_TASK, arn)) == (arn, "my-cluster")
+    # A row that names the cluster wins over the ARN, and a TaskArn property works.
+    assert sh.task_and_cluster(ref(sh.ECS_TASK, "abc", Cluster="c")) == ("abc", "c")
+    assert sh.task_and_cluster(ref(sh.ECS_TASK, "", TaskArn=arn)) == (arn, "my-cluster")
 
 
 def test_an_id_that_is_not_an_instance_is_refused():

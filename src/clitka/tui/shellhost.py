@@ -38,7 +38,12 @@ def _ec2(context: Context, ref: act.ResourceRef) -> ho.Handoff:
     return ho.ssm_session(context, target)
 
 
-def _ecs_task(context: Context, ref: act.ResourceRef) -> ho.Handoff:
+def task_and_cluster(ref: act.ResourceRef) -> tuple[str, str]:
+    """The task and the cluster it lives in, or `ValueError` when it cannot be told.
+
+    Pure, so the ARN arithmetic is testable without a network - `_ecs_task` then
+    only adds the live check on top.
+    """
     task = ref.identifier or str(ref.row.get("TaskArn", ""))
     cluster = str(ref.row.get("Cluster") or ref.row.get("ClusterName") or "")
     if not cluster:
@@ -47,8 +52,24 @@ def _ecs_task(context: Context, ref: act.ResourceRef) -> ho.Handoff:
         cluster = parts[1] if len(parts) > 2 else ""
     if not cluster:
         raise ValueError("cannot tell which cluster this task is in - use `clitka` in a shell")
+    return task, cluster
+
+
+def _ecs_task(context: Context, ref: act.ResourceRef) -> ho.Handoff:
+    """An `ecs execute-command` shell - but only after ECS has been asked.
+
+    Since the `ecs` plugin landed this goes through `ecsrun.shell_for`, which
+    **describes the task first** and raises `ValueError` with a sentence when an
+    exec cannot work: the task is not running, execute-command was never enabled,
+    or the managed agent is not up. That check belongs here, outside the suspend
+    block (rule 1) - otherwise the user gets a wall of
+    `TargetNotConnectedException` after the app has already stepped aside.
+    """
+    from clitka.core.ecsrun import shell_for
+
+    task, cluster = task_and_cluster(ref)
     container = str(ref.row.get("ContainerName") or "")
-    return ho.ecs_exec(context, cluster, task, container=container)
+    return shell_for(context, cluster, task, container=container)
 
 
 OPENERS = {
@@ -158,15 +179,15 @@ def _self_check() -> None:
     else:
         raise AssertionError("a non-instance id should have been refused")
 
+    # An ECS exec now goes through `ecsrun.shell_for`, which describes the task
+    # first - so only the pure half is checkable without a network.
     arn = "arn:aws:ecs:eu-central-1:1:task/my-cluster/abc123"
-    task = _ecs_task(ctx, act.ResourceRef(ECS_TASK, arn, {}))
-    # The cluster comes out of the ARN when the row does not carry it.
-    assert "my-cluster" in task.argv, task.argv
-    assert "--interactive" in task.argv
-    named = _ecs_task(ctx, act.ResourceRef(ECS_TASK, "abc", {"Cluster": "c", "ContainerName": "a"}))
-    assert named.argv[-2:] == ["--container", "a"], named.argv
+    assert task_and_cluster(act.ResourceRef(ECS_TASK, arn, {})) == (arn, "my-cluster")
+    # The row wins over the ARN, and a bare TaskArn property is accepted.
+    assert task_and_cluster(act.ResourceRef(ECS_TASK, "abc", {"Cluster": "c"})) == ("abc", "c")
+    assert task_and_cluster(act.ResourceRef(ECS_TASK, "", {"TaskArn": arn}))[0] == arn
     try:
-        _ecs_task(ctx, act.ResourceRef(ECS_TASK, "abc", {}))
+        task_and_cluster(act.ResourceRef(ECS_TASK, "abc", {}))
     except ValueError as exc:
         assert "cluster" in str(exc), exc
     else:

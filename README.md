@@ -30,8 +30,9 @@ invoke, deploy, tail, exec, upload, execute.
 ## Status
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
-resource explorer, CloudWatch Logs, Lambda, ECR and EC2 work; the remaining
+resource explorer, CloudWatch Logs, Lambda, ECR, EC2 and ECS work; the remaining
 per-service modules are being built milestone by milestone.
+
 
 
 What works today:
@@ -86,6 +87,25 @@ Every power command **reads the state first** and refuses in a sentence: startin
 an instance that is already running is a silent no-op at the API, and stopping one
 that is still `pending` is an error code. There is deliberately **no `terminate`** -
 it cannot be undone, so it stays a console job.
+
+```bash
+clitka ecs clusters                           # what runs where, Fargate or EC2
+clitka ecs services prod --unhealthy          # only the ones not fully up
+clitka ecs tasks prod --stopped               # including the ones that just died
+clitka ecs get prod abc123def456              # and whether a shell would open
+clitka ecs exec prod abc123def456             # a shell inside the container
+clitka ecs exec prod abc123 --dry-run         # just print the command
+```
+
+ECS is the one service the generic explorer cannot reach: **Cloud Control has no
+`AWS::ECS::Task` resource type at all**, so `clitka ecs tasks` is the only way to
+see a task - and the only way to get a shell into one. `exec` **describes the task
+before handing the terminal over** and refuses in a sentence when it cannot work:
+the task is still starting, it was never launched with `--enable-execute-command`
+(which cannot be switched on afterwards), or its execute-command agent is not up
+because the task role is missing `ssmmessages:*`. All four beat reading
+`TargetNotConnectedException` on a bare terminal.
+
 
 
 The TUI is split: the tree of resource types on the left, a preview of what you
