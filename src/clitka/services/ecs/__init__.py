@@ -18,6 +18,7 @@ from typing import Any
 from clitka.core.hookspecs import hookimpl
 from clitka.services.ecs.actions import ACTIONS, PREVIEWS
 from clitka.services.ecs.cli import app
+from clitka.services.ecs.listers import LISTERS
 
 
 @hookimpl
@@ -40,3 +41,14 @@ def clitka_actions() -> list[Any]:
 def clitka_previews() -> list[Any]:
     """`Tasks` on a cluster or service, plus `Service` and `Task` detail tabs."""
     return list(PREVIEWS)
+
+
+@hookimpl
+def clitka_listers() -> list[Any]:
+    """`Services` and `Tasks` sub-branches - what makes a task *clickable*.
+
+    The owner's report (2026-08-01): none of the tasks could be reached by
+    clicking, because the F9 action and the preview tab only ever printed them as
+    text. These put real, selectable nodes in the tree, so `x` works on one.
+    """
+    return list(LISTERS)

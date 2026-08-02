@@ -28,7 +28,9 @@ COMMON_TYPES: tuple[str, ...] = (
     "AWS::SNS::Topic",
     "AWS::SQS::Queue",
     "AWS::IAM::Role",
+    "AWS::SSM::Parameter",
 )
+
 
 # The branches the landing tree opens with - the types the owner actually works
 # with, in the order they are most often wanted. Nothing is fetched until a branch
@@ -107,6 +109,12 @@ Opening and closing
   right / left     open / close without moving off the node
   :                add any other resource type as a new branch
 
+Some resources hold more: an ECS cluster folds out into Services and Tasks, and a
+service into its own Tasks. Those come from the service plugin, not from Cloud
+Control - which is the only way an ECS task is reachable at all, since it has no
+resource type. Open the cluster leaf and the sub-branches appear under it; what is
+inside them is a normal resource, so F3, F9 and x all work on it.
+
 The preview
 
   enter            on a *resource*: show it in the pane on the right
@@ -137,6 +145,7 @@ Doing things
   F4   edit the highlighted resource
   x    open a shell on it - an EC2 instance (SSM) or an ECS task (exec).
        CLITKA steps aside for the session and comes back when you exit.
+       To reach a task: open the ECS cluster leaf, then its Tasks sub-branch.
 
   F5   collapse everything and forget it (this is also the retry after an error)
   F9   actions for the highlighted resource (a type branch has none)
@@ -171,6 +180,8 @@ def _self_check() -> None:
         # The shell handoff has no menu-bar slot, so the help is its only home.
         assert "\n  x    open a shell" in text, text
     assert "enter / space" in TREE_HELP
+    # The sub-branches are the only route to an ECS task, so they must be named.
+    assert "Tasks sub-branch" in TREE_HELP
     assert "left / right" in TREE_HELP, "keyboard tab switching must be documented"
     for text in (EXPLORER_HELP, TREE_HELP):
         assert "W    time window" in text, text

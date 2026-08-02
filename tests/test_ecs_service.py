@@ -25,6 +25,7 @@ from clitka.core import plugins
 from clitka.core.actions import ResourceRef
 from clitka.core.context import Context
 from clitka.services.ecs import actions as ea
+from clitka.services.ecs import listers as el
 
 runner = CliRunner()
 STARTED = dt.datetime(2026, 7, 1, 9, 30, tzinfo=dt.UTC)
@@ -114,6 +115,7 @@ def arm_task_list(stub, **kwargs) -> None:
 
 def test_the_self_check_passes():
     ea._self_check()
+    el._self_check()
 
 
 # --- the plugin seam ------------------------------------------------------
@@ -158,8 +160,9 @@ def test_no_single_key_is_claimed_twice_on_any_ecs_type(type_name):
 def test_a_task_is_reachable_only_through_this_plugin():
     """Cloud Control has no `AWS::ECS::Task`, which is why the plugin exists.
 
-    So it must not be a tree branch or a palette fallback - nothing there could
-    list it - and this plugin must be what publishes actions for it.
+    So it must not be a *top-level* tree branch or a palette fallback - nothing
+    there could list it - and this plugin must be what publishes actions for it.
+    It reaches the tree as a **sub-branch** instead; see the lister tests below.
     """
     from clitka.tui import restypes
 
@@ -168,6 +171,114 @@ def test_a_task_is_reachable_only_through_this_plugin():
     ref = ResourceRef(ea.TASK, TASK_ARN, {})
     owners = {one.id.split(".", 1)[0] for one in plugins.actions() if one.applies_to(ref)}
     assert "ecs" in owners
+
+
+# --- the child listers: what makes a task CLICKABLE -----------------------
+
+
+def test_the_listers_reach_the_registry():
+    """The owner's report: no task could be reached by clicking. These fix it."""
+    from clitka.core import lister
+
+    ids = {one.id for one in lister.registered()}
+    assert {"ecs.services", "ecs.tasks"} <= ids
+
+
+def test_a_cluster_grows_both_sub_branches_and_a_service_only_tasks():
+    from clitka.core import lister
+
+    cluster = ResourceRef.from_row(ea.CLUSTER, {"identifier": "prod"})
+    service = ResourceRef(ea.SERVICE, "arn:aws:ecs:eu-central-1:1:service/prod/api", {})
+    task = ResourceRef(ea.TASK, TASK_ARN, {})
+    assert [one.id for one in lister.available(el.LISTERS, cluster)] == [
+        "ecs.services",
+        "ecs.tasks",
+    ]
+    assert [one.id for one in lister.available(el.LISTERS, service)] == ["ecs.tasks"]
+    # A task is a leaf - nothing hangs under it, so it gets no fold arrow.
+    assert lister.available(el.LISTERS, task) == []
+
+
+def test_the_tasks_lister_returns_rows_a_shell_can_be_opened_on(ctx, cluster_ref):
+    """The whole point: `x` needs a `ResourceRef`, and it must carry the cluster."""
+    from clitka.tui.shellhost import task_and_cluster
+
+    with Stubber(ctx.client("ecs")) as stub:
+        arm_task_list(stub)
+        found = el.list_tasks(ctx, cluster_ref)
+
+    assert len(found) == 1
+    one = found[0]
+    assert one.type_name == ea.TASK
+    # The ARN, not the short id - it carries the cluster all on its own.
+    assert one.identifier == TASK_ARN
+    assert one.properties["Cluster"] == "prod"
+    assert one.properties["exec"] == "ready"
+    # And the leaf leads with something human, not with `abc123def456`.
+    assert one.name() and "api" in one.name()
+
+    ref = ResourceRef.from_row(ea.TASK, one.row())
+    assert task_and_cluster(ref) == (TASK_ARN, "prod")
+    assert ea.cluster_name(ref) == "prod"
+
+
+def test_a_task_that_cannot_be_entered_says_so_in_its_row(ctx, cluster_ref):
+    with Stubber(ctx.client("ecs")) as stub:
+        arm_task_list(stub, on=False)
+        found = el.list_tasks(ctx, cluster_ref)
+    assert found[0].properties["exec"] != "ready"
+    assert "enable-execute-command" in found[0].properties["exec"]
+
+
+def test_the_tasks_lister_on_a_service_narrows_to_that_service(ctx):
+    service = ResourceRef(
+        ea.SERVICE, "arn:aws:ecs:eu-central-1:1:service/prod/api", {"Cluster": "prod"}
+    )
+    with Stubber(ctx.client("ecs")) as stub:
+        # ListTasks wants the service NAME; an ARN here is a validation error.
+        stub.add_response(
+            "list_tasks",
+            {"taskArns": [TASK_ARN]},
+            {
+                "cluster": "prod",
+                "maxResults": ANY,
+                "serviceName": "api",
+                "desiredStatus": "RUNNING",
+            },
+        )
+        arm_task(stub)
+        found = el.list_tasks(ctx, service)
+        stub.assert_no_pending_responses()
+    assert len(found) == 1
+
+
+def test_the_services_lister_scopes_each_service_to_its_cluster(ctx, cluster_ref):
+    """A service under its own cluster is what makes its `Tasks` sub-branch work."""
+    with Stubber(ctx.client("ecs")) as stub:
+        stub.add_response(
+            "list_services",
+            {"serviceArns": ["arn:aws:ecs:eu-central-1:1:service/prod/api"]},
+            {"cluster": ANY, "maxResults": ANY},
+        )
+        stub.add_response(
+            "describe_services", {"services": [raw_service()]}, {"cluster": ANY, "services": ANY}
+        )
+        found = el.list_services(ctx, cluster_ref)
+    assert len(found) == 1 and found[0].type_name == ea.SERVICE
+    assert found[0].properties["Cluster"] == "prod"
+    # Which means the ref built from it can list its own tasks.
+    ref = ResourceRef.from_row(ea.SERVICE, found[0].row())
+    assert ea.cluster_name(ref) == "prod"
+
+
+def test_a_row_never_carries_identifier_or_name_as_a_property():
+    """Both are derived by `cloudcontrol.Resource`; duplicated they show twice."""
+    from clitka.core.ecstask import RUNNING
+
+    made = el.task_resource(ea.ecs.Task(TASK_ARN, last_status=RUNNING), "prod")
+    assert "identifier" not in made.properties and "name" not in made.properties
+    service = el.service_resource(ea.ecs.Service(name="api", cluster="prod"), "prod")
+    assert "identifier" not in service.properties and "name" not in service.properties
 
 
 def test_the_actions_only_offer_themselves_on_their_own_types():

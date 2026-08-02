@@ -46,12 +46,19 @@ class TypeNode:
         self.resources = []
 
 
-@dataclass(frozen=True)
+@dataclass
 class ResourceNode:
-    """One actual resource - a leaf. F9 acts on this."""
+    """One actual resource - a leaf, unless a plugin hangs children under it.
+
+    Deliberately NOT frozen: `expanded_children` has to be settable, and it lives
+    on the payload rather than in a set beside the tree so that F5 - which throws
+    the nodes away - forgets it automatically.
+    """
 
     type_name: str
     resource: cc.Resource
+    expanded_children: bool = False
+    """True once `ChildLoader` has hung this resource's sub-branches under it."""
 
     def label(self) -> str:
         """`name (identifier)  detail` - the name leads, because it is what a
@@ -125,6 +132,9 @@ def _self_check() -> None:
     assert "BucketName" not in leaf.label()
     bare = ResourceNode("T", cc.Resource("T", "", {}))
     assert bare.label() == "(no identifier)"
+    # The sub-branch flag must start off and be settable - a frozen node could not.
+    assert leaf.expanded_children is False
+    leaf.expanded_children = True
 
     # The order follows the label, which leads with the name where there is one.
     def made(identifier: str, **props: object) -> cc.Resource:

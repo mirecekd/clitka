@@ -4,11 +4,13 @@ The owner's model: 1/3 tree on the left, 2/3 detail on the right. The tree lists
 only the *interesting* types; open one and its resources unfold underneath, loaded
 on demand and appearing page by page; close it and they fold away but are kept.
 Anything not on the list is one `:` away. Pressing enter on a resource previews it
-- moving the cursor never fetches.
+- moving the cursor never fetches - and a resource a plugin can list children of
+opens further still (an ECS cluster into its Tasks).
 
-The mixins do the work: `BranchLoader` fetches, `TreeSelection` answers "what is
-picked", `ActionHost` is F9, `ViewEditHost` F3/F4 and `ShellHost` the `x` handoff.
-This file is layout and keyboard only.
+The mixins do the work: `BranchLoader` fetches a type, `ChildLoader` a plugin's
+sub-branch, `TreeSelection` answers "what is picked", `ActionHost` is F9,
+`ViewEditHost` F3/F4 and `ShellHost` the `x` handoff. This file is layout and
+keyboard only.
 """
 
 from __future__ import annotations
@@ -16,7 +18,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Static, Tree
@@ -24,72 +25,35 @@ from textual.widgets.tree import TreeNode
 
 from clitka.core.context import Context
 from clitka.tui.actionhost import ActionHost
+from clitka.tui.childload import ChildLoader
+from clitka.tui.childmodel import ChildNode
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import KeyBar
 from clitka.tui.preview import PreviewPane
 from clitka.tui.restypes import TREE_HELP, TREE_TYPES
 from clitka.tui.shellhost import ShellHost
 from clitka.tui.status import StatusBar
+from clitka.tui.treekeys import TREE_BINDINGS, TREE_CSS
 from clitka.tui.treeload import NOT_LOADED, BranchLoader
 from clitka.tui.treemodel import ResourceNode, TypeNode
 from clitka.tui.treesel import TreeSelection
 from clitka.tui.viewedit import ViewEditHost
 
-Payload = TypeNode | ResourceNode
+Payload = TypeNode | ResourceNode | ChildNode
 
 
 # `TreeSelection` comes FIRST: it supplies `selected_ref` / `_title` /
 # `_after_action`, which `ActionHost` declares abstract. Put ActionHost ahead of
 # it and the MRO picks the NotImplementedError stubs instead - F9 then dies on
 # every keypress.
-class ResourceTree(TreeSelection, ViewEditHost, ShellHost, ActionHost, BranchLoader, Screen[None]):
+class ResourceTree(
+    TreeSelection, ViewEditHost, ShellHost, ActionHost, ChildLoader, BranchLoader, Screen[None]
+):
     """The tree of resource types. F9 acts on the resource under the cursor."""
 
-    # Both panes are framed at ALL times; only the frame's colour says who holds
-    # the keyboard - yellow ($warning) is active (owner's call, 2026-07-31).
-    # Bordering on focus only made the contents jump by a cell on every move.
-    DEFAULT_CSS = """
-    ResourceTree #tree-title {
-        height: 1;
-        padding: 0 1;
-        color: $text-muted;
-    }
-    ResourceTree Tree {
-        height: 1fr;
-        padding: 0 1;
-        border: round $panel;
-    }
-    ResourceTree #split {
-        height: 1fr;
-    }
-    ResourceTree #tree-side {
-        width: 1fr;
-        min-width: 32;
-    }
-    ResourceTree Tree:focus {
-        border: round $warning;
-    }
-    """
-
-    BINDINGS = [
-        # Textual binds enter to "select", which only posts a NodeSelected message
-        # and expands nothing. `space` does toggle, but enter is what a user
-        # reaches for, so it is claimed here.
-        Binding("enter", "toggle", "Open / preview", show=False, priority=True),
-        Binding("tab", "focus_preview", "Preview / tree", show=False, priority=True),
-        Binding("t", "tail", "Live tail", show=False),
-        Binding("f1", "help", "Help", show=False),
-        Binding("f3", "view", "View", show=False),
-        Binding("f4", "edit", "Edit", show=False),
-        Binding("x", "connect", "Shell", show=False),
-        # A Screen shadows the App's bindings, so the app-wide keys are forwarded.
-        Binding("p,P", "app.switch_profile", "Profile", show=False),
-        Binding("r,R", "app.switch_region", "Region", show=False),
-        Binding("w,W", "app.switch_window", "Window", show=False),
-        Binding("f5", "reload", "Refresh", show=False),
-        Binding("f9", "actions", "Actions", show=False),
-        Binding("f10", "quit", "Quit", show=False),
-    ]
+    # Both live in `treekeys.py` - declarations only, and this file was over 8 kB.
+    DEFAULT_CSS = TREE_CSS
+    BINDINGS = TREE_BINDINGS
 
     def __init__(self, context: Context, types: Sequence[str] = TREE_TYPES) -> None:
         super().__init__()
@@ -167,9 +131,18 @@ class ResourceTree(TreeSelection, ViewEditHost, ShellHost, ActionHost, BranchLoa
                 break
 
     def on_tree_node_expanded(self, event: Tree.NodeExpanded[Payload]) -> None:
+        """Three kinds of node open here, and each fetches differently: a type
+        through Cloud Control, a plugin sub-branch through a `ChildLister`, and a
+        *resource* only grows its sub-branches - which is what makes an ECS task
+        clickable at all (owner's report, 2026-08-01).
+        """
         data = event.node.data
         if isinstance(data, TypeNode) and not data.loaded and not data.loading:
             self.load(event.node, data)
+        elif isinstance(data, ChildNode) and not data.loaded and not data.loading:
+            self.load_children(event.node, data)
+        elif isinstance(data, ResourceNode):
+            self.attach_children(event.node, data)
 
     def adopt_context(self, context: Context) -> None:
         """F2/F3 switched profile or region - everything loaded is now stale."""
@@ -189,14 +162,24 @@ class ResourceTree(TreeSelection, ViewEditHost, ShellHost, ActionHost, BranchLoa
         self._overview()
 
     def action_reload_branch(self) -> None:
-        """Refetch just the branch the cursor is in - after a delete, say."""
+        """Refetch the *nearest* branch the cursor is in - after a delete, say.
+
+        It may be a plugin sub-branch: after stopping a task, refetching that
+        `Tasks` list beats rebuilding the whole cluster type from Cloud Control.
+        """
         node = self.rtree.cursor_node
-        while node is not None and not isinstance(node.data, TypeNode):
+        while node is not None and not isinstance(node.data, TypeNode | ChildNode):
             node = node.parent
-        if node is None or not isinstance(node.data, TypeNode):
+        if node is None:
             return
-        node.data.reset()
-        self.load(node, node.data)
+        data = node.data
+        if isinstance(data, ChildNode):
+            data.reset()
+            node.remove_children()
+            self.load_children(node, data)
+        elif isinstance(data, TypeNode):
+            data.reset()
+            self.load(node, data)
 
     def action_help(self) -> None:
         self.app.push_screen(TextDrop("F1  Help - resources", TREE_HELP, "f1"))

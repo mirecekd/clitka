@@ -39,3 +39,12 @@ class ClitkaSpec:
     @hookspec
     def clitka_previews(self) -> list[Any]:
         """Return PreviewTab objects for the detail pane beside the tree."""
+
+    @hookspec
+    def clitka_listers(self) -> list[Any]:
+        """Return ChildLister objects - sub-branches under a resource in the tree.
+
+        This is how a plugin brings a listing Cloud Control cannot do (an ECS task
+        has no resource type at all), so the thing becomes clickable rather than
+        only printable.
+        """

@@ -73,8 +73,9 @@ def test_the_plugin_is_registered_and_publishes_its_cli_group():
 
 
 def test_the_plugin_is_the_seventh_builtin():
-    assert "clitka.services.apigw" in plugins.BUILTIN_SERVICES
-    assert len(plugins.BUILTIN_SERVICES) == 7
+    # Its *position*, not the total: the next plugin must not have to edit this.
+    # (It did once - `ssm` became the eighth.)
+    assert plugins.BUILTIN_SERVICES.index("clitka.services.apigw") == 6
 
 
 def test_the_actions_and_previews_reach_the_registry():

@@ -14,6 +14,7 @@ from __future__ import annotations
 from textual.widgets import Tree
 
 from clitka.core import actions as act
+from clitka.tui.childmodel import ChildNode
 from clitka.tui.preview import PreviewPane
 from clitka.tui.treemodel import ResourceNode, TypeNode
 
@@ -32,11 +33,11 @@ class TreeSelection:
     def type_name(self) -> str:
         """`ActionHost` uses this for its headings."""
         data = self._selected()
-        if isinstance(data, ResourceNode | TypeNode):
+        if isinstance(data, ResourceNode | TypeNode | ChildNode):
             return data.type_name
         return "Resources"
 
-    def _selected(self) -> TypeNode | ResourceNode | None:
+    def _selected(self) -> TypeNode | ResourceNode | ChildNode | None:
         node = self.rtree.cursor_node  # type: ignore[attr-defined]
         return None if node is None else node.data
 
@@ -56,18 +57,25 @@ class TreeSelection:
     # --- filling the preview ----------------------------------------------
 
     def action_toggle(self) -> None:
-        """enter: open or close a type, or preview the resource under the cursor.
+        """enter: open or close a branch, or preview the resource under the cursor.
 
         This is the *only* keyboard path into the preview (the owner's call).
+
+        On a resource it does **both**: it fills the preview *and* folds out the
+        sub-branches a plugin published for it (an ECS cluster's `Tasks`). One key
+        for both is deliberate - the preview is what the user came for, and the
+        children are the reason a task is reachable at all.
         """
         node = self.rtree.cursor_node  # type: ignore[attr-defined]
         if node is None:
             return
-        if isinstance(node.data, TypeNode):
+        if isinstance(node.data, TypeNode | ChildNode):
             node.toggle()
             return
         if isinstance(node.data, ResourceNode):
             self.preview.show(self.selected_ref())
+            if node.allow_expand:
+                node.toggle()
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """A mouse click also previews - but must not double-toggle a branch.

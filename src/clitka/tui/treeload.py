@@ -107,12 +107,31 @@ class BranchLoader:
             return
         for resource in sorted(found, key=sort_key):
             leaf = ResourceNode(node.type_name, resource)
-            branch.add_leaf(leaf.label(), data=leaf, before=self._slot(branch, resource))
+            # `add`, not `add_leaf`: a resource a plugin can list children of has
+            # to be expandable, or an ECS task stays unreachable (owner's report).
+            # `allow_expand` is decided per resource so every other type keeps a
+            # plain leaf with no misleading fold arrow.
+            branch.add(
+                leaf.label(),
+                data=leaf,
+                before=self._slot(branch, resource),
+                expand=False,
+                allow_expand=self.leaf_allows_children(leaf),
+            )
         self.drop_placeholders(branch)
         node.resources.extend(found)
         node.resources.sort(key=sort_key)  # keep the payload in step with the screen
         node.count = len(node.resources)
         branch.set_label(node.label())
+
+    def leaf_allows_children(self, leaf: ResourceNode) -> bool:
+        """Whether anything could hang under this resource.
+
+        `ChildLoader` answers properly; a host without it says no, which is what
+        keeps this mixin usable on its own.
+        """
+        ask = getattr(self, "has_child_listers", None)
+        return bool(ask(leaf)) if callable(ask) else False
 
     @staticmethod
     def _slot(branch: TreeNode, resource: cc.Resource) -> TreeNode | None:

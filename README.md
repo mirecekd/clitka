@@ -30,8 +30,10 @@ invoke, deploy, tail, exec, upload, execute.
 ## Status
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
-resource explorer, CloudWatch Logs, Lambda, ECR, EC2, ECS and API Gateway work;
-the remaining per-service modules are being built milestone by milestone.
+resource explorer, CloudWatch Logs, Lambda, ECR, EC2, ECS, API Gateway and Systems
+Manager work; the remaining per-service modules are being built milestone by
+milestone.
+
 
 What works today:
 
@@ -97,10 +99,13 @@ clitka ecs exec prod abc123 --dry-run         # just print the command
 ```
 
 ECS is the one service the generic explorer cannot reach: **Cloud Control has no
-`AWS::ECS::Task` resource type at all**, so `clitka ecs tasks` is the only way to
-see a task - and the only way to get a shell into one. `exec` **describes the task
-before handing the terminal over** and refuses in a sentence when it cannot work:
-the task is still starting, it was never launched with `--enable-execute-command`
+`AWS::ECS::Task` resource type at all**. In the TUI an ECS cluster therefore folds
+out into `Services` and `Tasks` sub-branches of its own - open the cluster leaf and
+they appear underneath it, filled by the plugin rather than by Cloud Control. What
+is inside them is an ordinary resource, so `F3`, `F9` and `x` all work on a task.
+`exec` **describes the task before handing the terminal over** and refuses in a
+sentence when it cannot work: the task is still starting, it was never launched with
+`--enable-execute-command`
 (which cannot be switched on afterwards), or its execute-command agent is not up
 because the task role is missing `ssmmessages:*`. All four beat reading
 `TargetNotConnectedException` on a bare terminal.
@@ -128,14 +133,47 @@ usable in a pipeline. It also explains the single most misleading message in AWS
 a 403 saying `Missing Authentication Token` almost never means a missing token - it
 is what an *unmatched route* says.
 
+```bash
+clitka ssm params                             # every parameter - metadata only
+clitka ssm params -c database                 # the bit of the name you remember
+clitka ssm get /app/prod/url                  # a SecureString stays hidden
+clitka ssm get /app/prod/pw --decrypt         # ...unless you ask, right here
+clitka ssm path /app/prod                     # one app's whole config in one call
+clitka ssm history /app/prod/url              # the recent versions
+clitka ssm put /app/prod/url https://x --overwrite
+clitka ssm delete /app/prod/url               # every version goes; asks first
+clitka ssm docs                               # your documents, not AWS's hundreds
+clitka ssm doc AWS-RunShellScript             # what it is, and what it wants
+clitka ssm run AWS-RunShellScript i-0abc -p 'commands=uptime'
+```
+
+**A `SecureString` is never decrypted unless that exact command asked to be.**
+Without `--decrypt` it reads as `<SecureString, hidden>` - not as its ciphertext,
+which is unreadable and yet looks like something worth pasting somewhere. The tree
+and the preview pane never decrypt at all, and `F9` offers *the command* rather
+than the value: a keystroke is too cheap for putting a production password onto a
+screen that may be shared, recorded, or scrolled back through an hour later.
+
+`run` exists for the same reason `lambda invoke` does. `aws ssm send-command`
+exits 0 as soon as AWS has *accepted* the request - before the script has run at
+all - so it cannot tell you anything. This waits, prints stdout and stderr, and
+**exits 1 when the script did not succeed**. Every knowable complaint arrives
+first, as a sentence: an `Automation` document cannot be sent to an instance, a
+required parameter is missing, the document does not run on that platform.
+Running a document is deliberately **not** an `F9` action - `SendCommand` executes
+a script on someone's machine and there is no undo.
+
+
 
 
 The TUI is split: the tree of resource types on the left, a preview of what you
 picked on the right. Nothing is fetched until you open a branch - `enter` (or
 `space`) unfolds a type and its resources stream in page by page, `enter` again
 folds it and keeps them. `enter` on a *resource* fills the preview pane; moving the
-cursor never costs an API call. Resources are listed by their **name** where they
-have one - the `Name` tag on an EC2 instance, say - with the identifier beside it,
+cursor never costs an API call. Some resources hold more: an **ECS cluster** opens
+into `Services` and `Tasks`, and a service into its own `Tasks` - the only route to
+an ECS task, which has no Cloud Control type. Resources are listed by their **name**
+where they have one - the `Name` tag on an EC2 instance, say - with the identifier,
 because `i-0abc1234...` tells nobody which machine that is. `:` adds any other type
 the account exposes as a further branch, `tab` moves between the tree and the
 preview (the focused side is outlined), `F3` views the selected resource in full,
@@ -185,7 +223,7 @@ Everything, in one place. Letter keys take either case.
 |---|---|
 | `up` / `down` | move one node; `page up` / `page down` a screenful |
 | `ctrl+home` / `ctrl+end` | first / last node |
-| `enter` / `space` | open a type (loads it) or close it again; on a resource, preview it |
+| `enter` / `space` | open a type (loads it) or close it again; on a resource, preview it - and unfold its sub-branches where it has any (an ECS cluster's `Tasks`) |
 | `right` / `left` | open / close without moving off the node |
 | `tab` | move between the tree and the preview - the focused side is outlined |
 | `t` | on a log group: follow it live (CloudWatch live tail) |
@@ -240,8 +278,9 @@ Roadmap, in order:
 1. Auth and context - profiles, IAM Identity Center login, region switching (done)
 2. TUI shell and the generic resources explorer (Cloud Control API) (done)
 3. CloudWatch Logs, including live tail (done)
-4. Lambda (done), ECS exec and EC2 SSM (the `x` handoff, done), ECR (done),
-   EC2 start/stop/reboot (done), API Gateway invoke (done), Systems Manager
+4. Lambda, ECS exec and EC2 SSM (the `x` handoff), ECR, EC2 start/stop/reboot,
+   API Gateway invoke, Systems Manager - Parameter Store, documents and
+   run-command (done)
 
 5. S3 browser and DynamoDB
 6. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
