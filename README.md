@@ -153,6 +153,11 @@ which is unreadable and yet looks like something worth pasting somewhere. The tr
 and the preview pane never decrypt at all, and `F9` offers *the command* rather
 than the value: a keystroke is too cheap for putting a production password onto a
 screen that may be shared, recorded, or scrolled back through an hour later.
+That masking lives in `core/redact.py` and is applied where Cloud Control's
+properties enter the app, **not** in the SSM plugin - because `GetResource` on a
+parameter volunteers the ciphertext whether anyone asked or not, so `F3` and the
+Raw tab would otherwise walk straight around the rule.
+
 
 `run` exists for the same reason `lambda invoke` does. `aws ssm send-command`
 exits 0 as soon as AWS has *accepted* the request - before the script has run at

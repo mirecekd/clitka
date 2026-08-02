@@ -49,6 +49,10 @@ TREE_TYPES: tuple[str, ...] = (
     "AWS::CloudFormation::Stack",
     "AWS::StepFunctions::StateMachine",
     "AWS::ApiGateway::RestApi",
+    # A parameter is where an app's configuration actually lives, so it is worth
+    # a landing branch - and a `SecureString` leaf is safe to show because a
+    # listing carries no value at all (`DescribeParameters` never returns one).
+    "AWS::SSM::Parameter",
 )
 
 

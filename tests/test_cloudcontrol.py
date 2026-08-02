@@ -51,9 +51,27 @@ def test_columns_for_empty_input():
 
 
 def test_properties_that_are_not_json_are_kept_verbatim():
-    assert cc._parse_properties("not json") == {"Properties": "not json"}
-    assert cc._parse_properties(None) == {}
-    assert cc._parse_properties('{"a":1}') == {"a": 1}
+    # The type name is passed in because parsing is also where secrets are
+    # masked (`core/redact.py`) - see test_ssm_service for why.
+    assert cc._parse_properties("AWS::S3::Bucket", "not json") == {"Properties": "not json"}
+    assert cc._parse_properties("AWS::S3::Bucket", None) == {}
+    assert cc._parse_properties("AWS::S3::Bucket", '{"a":1}') == {"a": 1}
+
+
+def test_a_secret_property_is_masked_as_the_properties_are_parsed():
+    """Every route into the explorer comes through here, which is the point.
+
+    Cloud Control volunteers a `SecureString`'s ciphertext on GetResource, so
+    masking anywhere else would have been one plugin's private care rather than
+    a rule. Found live on sw-sandbox.
+    """
+    raw = '{"Type": "SecureString", "Value": "AQICAHgcBLOB", "Name": "/db/pw"}'
+    safe = cc._parse_properties("AWS::SSM::Parameter", raw)
+    assert safe["Value"] == "<SecureString, hidden>"
+    assert "AQICAHgcBLOB" not in str(safe)
+    # A plain String is not a secret and must survive untouched.
+    plain = '{"Type": "String", "Value": "eu-central-1"}'
+    assert cc._parse_properties("AWS::SSM::Parameter", plain)["Value"] == "eu-central-1"
 
 
 def test_list_resources_follows_pagination(ctx):

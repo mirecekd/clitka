@@ -12,6 +12,8 @@ this plugin could break by accident:
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from botocore.stub import Stubber
 
@@ -76,11 +78,72 @@ def test_no_two_plugins_publish_the_same_action_or_tab_id():
 
 
 def test_a_parameter_is_reachable_as_a_tree_branch():
-    # `AWS::SSM::Parameter` is a real Cloud Control type, so the palette must be
-    # able to offer it even when ListTypes is denied.
-    from clitka.tui.restypes import COMMON_TYPES
+    """It is a landing branch, not just something `:` can find (owner's request).
 
+    `AWS::SSM::Parameter` is a real Cloud Control type - unlike `AWS::ECS::Task` -
+    so the tree can fill the branch itself, and a listing carries no values at
+    all, which is what makes a `SecureString` leaf safe to show.
+    """
+    from clitka.tui.restypes import COMMON_TYPES, TREE_TYPES
+
+    assert ssm.PARAMETER in TREE_TYPES
+    # And in the palette fallback too, or a ListTypes denial would leave the user
+    # unable to reopen the branch after F5.
     assert ssm.PARAMETER in COMMON_TYPES
+
+
+def test_cloud_control_does_not_leak_a_secure_string_through_the_generic_explorer(ctx):
+    """The hole found live on sw-sandbox, and the reason `core/redact.py` exists.
+
+    `GetResource` on a parameter volunteers the `SecureString`'s ciphertext even
+    though nothing asked to decrypt - so F3, the Raw tab and `resources get` all
+    printed a real KMS blob, walking straight around the SSM plugin's own care.
+    **A rule enforced in one plugin is not enforced**: the generic explorer speaks
+    for every type, so the masking has to happen where properties come in.
+    """
+    from clitka.core import cloudcontrol as cc
+
+    blob = "AQICAHgbX3jL9oaaNarDR" + "A" * 200
+    payload = json.dumps(
+        {"Type": "SecureString", "Value": blob, "Name": "/db/pw", "DataType": "text"}
+    )
+    with Stubber(ctx.client("cloudcontrol")) as stub:
+        stub.add_response(
+            "get_resource",
+            {
+                "TypeName": ssm.PARAMETER,
+                "ResourceDescription": {"Identifier": "/db/pw", "Properties": payload},
+            },
+            {"TypeName": ssm.PARAMETER, "Identifier": "/db/pw"},
+        )
+        resource = cc.get_resource(ctx, ssm.PARAMETER, "/db/pw")
+
+    assert resource.properties["Value"] == ssm.MASK
+    # The blob must not survive anywhere the pane or the CLI would read from.
+    assert blob not in str(resource.properties)
+    assert blob not in str(resource.row())
+    # Everything else about the parameter still shows.
+    assert resource.properties["Name"] == "/db/pw"
+    assert resource.properties["DataType"] == "text"
+
+
+def test_the_generic_explorer_still_shows_a_plain_parameter_value(ctx):
+    # Only a SecureString is masked - a String's value is not a secret, and
+    # blanking it would make the explorer useless for ordinary config.
+    from clitka.core import cloudcontrol as cc
+
+    payload = json.dumps({"Type": "String", "Value": "eu-central-1", "Name": "/app/region"})
+    with Stubber(ctx.client("cloudcontrol")) as stub:
+        stub.add_response(
+            "get_resource",
+            {
+                "TypeName": ssm.PARAMETER,
+                "ResourceDescription": {"Identifier": "/app/region", "Properties": payload},
+            },
+            {"TypeName": ssm.PARAMETER, "Identifier": "/app/region"},
+        )
+        resource = cc.get_resource(ctx, ssm.PARAMETER, "/app/region")
+    assert resource.properties["Value"] == "eu-central-1"
 
 
 # --- nothing here may reveal a secret --------------------------------------

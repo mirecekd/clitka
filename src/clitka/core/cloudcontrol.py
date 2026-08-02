@@ -6,12 +6,13 @@ CloudFormation, so no per-service code is needed to browse things.
 
 Two honest caveats, surfaced rather than hidden:
 
-- Some types cannot be listed at all, and child types need a parent identifier
-  in `ResourceModel` (e.g. a subnet id). `list_resources` then fails with
-  `InvalidRequestException` / `UnsupportedActionException`; `AdditionalInputsError`
-  translates that into "which extra inputs are missing".
+- Child types need a parent identifier in `ResourceModel` (a subnet id, say), and
+  some types cannot be listed at all. `AdditionalInputsError` turns the API's
+  `InvalidRequestException` into "which extra inputs are missing".
 - Enumerating types needs `cloudformation:ListTypes`, which not every identity
   has. The caller gets a normal AwsError with the IAM hint.
+
+Properties are masked on the way in - see `core/redact.py`.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import Any
 
 from clitka.core.context import Context
 from clitka.core.errors import ClitkaError, wrap_aws_errors
+from clitka.core.redact import redact
 from clitka.core.resname import name_of
 
 _PAGE = 100
@@ -56,18 +58,18 @@ class Resource:
     def name(self) -> str:
         """A human-readable name, or "" when the identifier is all there is.
 
-        An EC2 instance is the reason this exists: `i-0abc...` is not what anyone
-        recognises the machine by - the `Name` tag is (owner's request). The
-        guessing itself lives in `core/resname.py`.
+        `i-0abc...` is not what anyone calls the machine - the `Name` tag is
+        (owner's request). The guessing lives in `core/resname.py`.
         """
         return name_of(self.identifier, self.properties)
 
     def row(self) -> dict[str, Any]:
-        """Flat row for the table: identifier, the name if there is one, then more.
+        """Flat row: identifier, the name if there is one, then the properties.
 
-        `name` is a *derived* column, not a property - `previewmodel.resource_from`
-        drops it again so it never shows up in the Raw tab.
+        `name` is *derived*, not a property - `previewmodel.resource_from` drops
+        it again so it never shows up in the Raw tab.
         """
+
         row: dict[str, Any] = {"identifier": self.identifier}
         name = self.name()
         if name:
@@ -78,14 +80,22 @@ class Resource:
         return row
 
 
-def _parse_properties(raw: str | None) -> dict[str, Any]:
+def _parse_properties(type_name: str, raw: str | None) -> dict[str, Any]:
+    """The `Properties` JSON as a dict, **with anything secret masked**.
+
+    The listing and `get_resource` both come through here, which is the point -
+    see `core/redact.py` for the leak that made it necessary.
+    """
+
     if not raw:
         return {}
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         return {"Properties": raw}
-    return parsed if isinstance(parsed, dict) else {"Properties": parsed}
+    if not isinstance(parsed, dict):
+        return {"Properties": parsed}
+    return redact(type_name, parsed)
 
 
 def _client(ctx: Context) -> Any:
@@ -134,8 +144,9 @@ def iter_resources(
             yield Resource(
                 type_name=type_name,
                 identifier=str(description.get("Identifier", "")),
-                properties=_parse_properties(description.get("Properties")),
+                properties=_parse_properties(type_name, description.get("Properties")),
             )
+
         token = page.get("NextToken")
         if not token:
             return
@@ -182,7 +193,7 @@ def get_resource(ctx: Context, type_name: str, identifier: str) -> Resource:
     return Resource(
         type_name=type_name,
         identifier=str(description.get("Identifier", identifier)),
-        properties=_parse_properties(description.get("Properties")),
+        properties=_parse_properties(type_name, description.get("Properties")),
     )
 
 
