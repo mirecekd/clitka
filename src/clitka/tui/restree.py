@@ -21,7 +21,6 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Static, Tree
-from textual.widgets.tree import TreeNode
 
 from clitka.core.context import Context
 from clitka.tui.actionhost import ActionHost
@@ -33,8 +32,9 @@ from clitka.tui.preview import PreviewPane
 from clitka.tui.restypes import TREE_HELP, TREE_TYPES
 from clitka.tui.shellhost import ShellHost
 from clitka.tui.status import StatusBar
+from clitka.tui.treebranch import BranchKeeper
 from clitka.tui.treekeys import TREE_BINDINGS, TREE_CSS
-from clitka.tui.treeload import NOT_LOADED, BranchLoader
+from clitka.tui.treeload import BranchLoader
 from clitka.tui.treemodel import ResourceNode, TypeNode
 from clitka.tui.treesel import TreeSelection
 from clitka.tui.viewedit import ViewEditHost
@@ -47,7 +47,14 @@ Payload = TypeNode | ResourceNode | ChildNode
 # it and the MRO picks the NotImplementedError stubs instead - F9 then dies on
 # every keypress.
 class ResourceTree(
-    TreeSelection, ViewEditHost, ShellHost, ActionHost, ChildLoader, BranchLoader, Screen[None]
+    TreeSelection,
+    ViewEditHost,
+    ShellHost,
+    ActionHost,
+    BranchKeeper,
+    ChildLoader,
+    BranchLoader,
+    Screen[None],
 ):
     """The tree of resource types. F9 acts on the resource under the cursor."""
 
@@ -104,31 +111,7 @@ class ResourceTree(
         self.query_one("#tree-title", Static).update(text)
 
     # --- branches ---------------------------------------------------------
-
-    def _add_type(self, type_name: str) -> TreeNode[Payload]:
-        node = TypeNode(type_name)
-        branch = self.rtree.root.add(node.label(), data=node, expand=False)
-        self.placeholder(branch, NOT_LOADED)
-        return branch
-
-    def add_type(self, type_name: str) -> None:
-        """`:` picked a type - add it, or jump to it if it is already a branch."""
-        for branch in self.rtree.root.children:
-            data = branch.data
-            if isinstance(data, TypeNode) and data.type_name == type_name:
-                self._reveal(branch)
-                return
-        self.types.append(type_name)
-        self._reveal(self._add_type(type_name))
-
-    def _reveal(self, branch: TreeNode[Payload]) -> None:
-        """Open a branch and put the cursor on it, without toggling it shut."""
-        branch.expand()
-        self.rtree.scroll_to_node(branch)
-        for index, line in enumerate(self.rtree._tree_lines):
-            if line.path[-1] is branch:
-                self.rtree.cursor_line = index
-                break
+    # `_add_type`, `add_type`, `adopt_types` and `_reveal` are `BranchKeeper`'s.
 
     def on_tree_node_expanded(self, event: Tree.NodeExpanded[Payload]) -> None:
         """Three kinds of node open here, and each fetches differently: a type

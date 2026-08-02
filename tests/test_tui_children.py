@@ -212,7 +212,55 @@ async def test_a_task_under_the_cluster_is_a_real_selectable_resource(ctx, liste
 
 
 @pytest.mark.asyncio
+async def test_a_child_only_gets_a_fold_arrow_when_something_can_fill_it(ctx, listed, monkeypatch):
+    """An arrow onto nothing is worse than none - and this was live for ECS.
+
+    `BranchLoader._page` was deliberately fixed to pass `allow_expand`, but
+    `_children_done` used a bare `branch.add()` and Textual defaults it to True, so
+    every task under a cluster offered to unfold and then did nothing. Found by the
+    S3 PoC (2026-08-02), where a prefix holding a prefix makes the distinction the
+    whole point: a prefix must open, an object must not.
+    """
+    prefix = "AWS::S3::Prefix"  # a pseudo-type, like `ecs.TASK` - it holds more
+    obj = "AWS::S3::Object"  # a leaf in every sense
+
+    def fake_list(_ctx, ref):
+        if ref.type_name != CLUSTER:
+            return []
+        return [
+            cc.Resource(prefix, "b/logs/", {"Name": "logs/"}),
+            cc.Resource(obj, "b/a.log", {"Name": "a.log"}),
+        ]
+
+    lister = ls.ChildLister(
+        "test.mixed",
+        "Objects",
+        prefix,
+        fake_list,
+        # Applies to the parent AND to its own prefix output - that is the recursion.
+        applies_to=lambda ref: ref.type_name in (CLUSTER, prefix),
+    )
+    monkeypatch.setattr(ls, "registered", lambda: [lister])
+
+    app = ClitkaApp(ctx)
+    async with app.run_test() as pilot:
+        screen = await _tree(app, pilot)
+        await _open_cluster(app, pilot, screen)
+        await pilot.press("down", "enter")
+        await _settle(app, pilot)
+
+        nodes = {
+            line.path[-1].data.resource.identifier: line.path[-1]
+            for line in screen.rtree._tree_lines
+            if isinstance(line.path[-1].data, ResourceNode)
+        }
+        assert nodes["b/logs/"].allow_expand is True, "a prefix holds prefixes - it must open"
+        assert nodes["b/a.log"].allow_expand is False, "an object has nothing to unfold"
+
+
+@pytest.mark.asyncio
 async def test_a_task_leaf_leads_with_its_name_not_the_arn(ctx, listed, tasks_lister):
+
     app = ClitkaApp(ctx)
     async with app.run_test() as pilot:
         screen = await _tree(app, pilot)

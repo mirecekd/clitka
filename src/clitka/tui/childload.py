@@ -106,7 +106,14 @@ class ChildLoader:
     def _children_done(self, branch: TreeNode, node: ChildNode, found: list) -> None:
         for resource in sorted(found, key=sort_key):
             leaf = ResourceNode(resource.type_name, resource)
-            branch.add(leaf.label(), data=leaf, expand=False)
+            # `allow_expand` as `BranchLoader._page` does it - Textual defaults it
+            # to True, so every child used to offer a fold arrow onto nothing.
+            branch.add(
+                leaf.label(),
+                data=leaf,
+                expand=False,
+                allow_expand=self.has_child_listers(leaf),
+            )
         self.drop_placeholders(branch)  # type: ignore[attr-defined]
         node.loading = False
         node.loaded = True

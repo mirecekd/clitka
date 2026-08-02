@@ -1,11 +1,31 @@
-"""Resource-type constants and the explorer's help text.
+"""Which resource types the explorer knows about, and which it opens with.
 
+Split out of `tui/explorer.py` to keep every file under 8 kB. `COMMON_TYPES` is
+the `:` palette's fallback; `tree_types()` answers "which branches does the
+explorer open with" - the built-in list, or whatever the `C` panel saved.
 
-Split out of `tui/explorer.py` purely to keep every file under 8 kB; there is no
-logic here. `COMMON_TYPES` is imported by the app for the `:` palette fallback.
+The two F1 help texts moved to `tui/restexts.py` when this file went over 8 kB and
+are re-exported here, so no caller had to change. The assertions that keep them
+honest stay in `_self_check` below, beside the keys they are about.
 """
 
 from __future__ import annotations
+
+from collections.abc import Sequence
+
+from clitka.core import clitkaconfig
+from clitka.tui.restexts import EXPLORER_HELP, TREE_HELP
+
+__all__ = [
+    "COMMON_TYPES",
+    "EXPLORER_HELP",
+    "MAX_ROWS",
+    "PAGE_ROWS",
+    "TREE_HELP",
+    "TREE_TYPES",
+    "tree_types",
+    "valid_types",
+]
 
 # ponytail: a short starter list of types that list cleanly without a parent
 # identifier. Ceiling: not exhaustive - it is only the fallback for when
@@ -32,12 +52,12 @@ COMMON_TYPES: tuple[str, ...] = (
 )
 
 
-# The branches the landing tree opens with - the types the owner actually works
-# with, in the order they are most often wanted. Nothing is fetched until a branch
-# is expanded, so the list can afford to be a little generous; anything missing is
-# one `:` away and is then added as a further branch.
-# ponytail: a constant, not a setting. Ceiling: it is the same for every account.
-# Upgrade path: remember the branches in ~/.config/clitka/config.toml.
+# The branches the landing tree opens with *by default* - the types most often
+# wanted, in the order they are most often wanted. Nothing is fetched until a
+# branch is expanded, so the list can afford to be a little generous; anything
+# missing is one `:` away and is then added as a further branch.
+# The `C` panel overrides this per user (`config.tree_types`); this list stays the
+# fallback for a fresh install, and the target of "reset to defaults".
 TREE_TYPES: tuple[str, ...] = (
     "AWS::S3::Bucket",
     "AWS::Lambda::Function",
@@ -56,110 +76,43 @@ TREE_TYPES: tuple[str, ...] = (
 )
 
 
-# How many resources are handed to the table at a time, and where listing stops.
+def valid_types(names: Sequence[str]) -> list[str]:
+    """Keep only what could actually be a Cloud Control type, in order, once each.
 
+    A branch whose name is not a resource type can never load anything, so it
+    would sit there with an error on it forever - worse than not offering it at
+    all. `TypeName` also has an API minimum length of 10, which is why a
+    "AWS::" prefix on its own is not enough of a check.
+    """
+    seen: set[str] = set()
+    good: list[str] = []
+    for name in names:
+        text = (name or "").strip()
+        if not text.startswith("AWS::") or len(text) < 10 or text.count("::") != 2:
+            continue
+        if text not in seen:
+            seen.add(text)
+            good.append(text)
+    return good
+
+
+def tree_types(configured: Sequence[str] | None = None) -> list[str]:
+    """The branches to open the explorer with: the user's list, else the default.
+
+    An **empty** answer is never returned. A config that lists nothing usable is a
+    config that would show an empty tree, which is not a state anyone chose on
+    purpose - so it falls back to `TREE_TYPES` rather than to nothing.
+    """
+    names = configured if configured is not None else clitkaconfig.load().tree_types
+    return valid_types(names) or list(TREE_TYPES)
+
+
+# How many resources are handed to the table at a time, and where listing stops.
 # ponytail: a fixed display cap rather than true on-demand paging. Ceiling: a type
 # with more than MAX_ROWS resources is shown truncated (the heading says so).
 # Upgrade path: keep the NextToken and fetch more when the cursor nears the end.
 PAGE_ROWS = 100
 MAX_ROWS = 2000
-
-EXPLORER_HELP = """\
-Moving around
-
-  up/down          one row            page up/down   a screenful
-  ctrl+home/end    first / last row
-
-Doing things
-
-  /    filter - matches every row loaded so far (escape clears it)
-  s    sort by the current column (again reverses it)
-  :    open a different resource type
-  F1   this help (F1 or escape closes it)
-  P    switch profile - reloads this list against the new one
-  R    switch region  - reloads this list against the new one
-  W    time window - how far back anything time-based looks
-
-  F3   view the highlighted resource in full (GetResource), as YAML
-  F4   edit the highlighted resource
-  x    open a shell on it - an EC2 instance or an ECS task
-  F5   reload the list
-  F9   actions for the highlighted resource
-  F10  quit
-
-  escape   back
-
-Resources arrive page by page and the list stays usable while they load - the
-heading says "loading..." until the last page is in. Destructive actions always
-ask first, and "no" is the default answer. Columns are derived from the properties
-Cloud Control actually returned for this type, so they differ from type to type -
-plus a `name` column wherever the type has a name (the `Name` tag on EC2).
-"""
-
-
-TREE_HELP = """\
-The screen is split: the tree of resource types on the left, a preview of what you
-picked on the right. Nothing is fetched until you open a branch, and what is
-fetched appears while it loads.
-
-Moving around
-
-  up/down          one node           page up/down   a screenful
-  ctrl+home/end    first / last node
-
-Opening and closing
-
-  enter / space    open a type (loads it) or close it again
-  right / left     open / close without moving off the node
-  :                add any other resource type as a new branch
-
-Some resources hold more: an ECS cluster folds out into Services and Tasks, and a
-service into its own Tasks. Those come from the service plugin, not from Cloud
-Control - which is the only way an ECS task is reachable at all, since it has no
-resource type. Open the cluster leaf and the sub-branches appear under it; what is
-inside them is a normal resource, so F3, F9 and x all work on it.
-
-The preview
-
-  enter            on a *resource*: show it in the pane on the right
-  tab              move between the tree and the preview, and back - whichever
-                   side has the keyboard is outlined
-  left / right     inside the preview: walk the tabs (Overview, Raw, ...)
-  up / down        inside the preview: scroll the tab
-  page up/down     inside the preview: page the tab; home / end jump to the ends
-
-  t                on a log group: follow it live (CloudWatch live tail)
-  w                how far back the Events tab looks: 1..0 for the presets,
-                   n / y for 1 month / 1 year, c to type one (90m, 2h, 1mo)
-
-
-Only enter (or a mouse click) fills the preview - moving the cursor never calls
-AWS, so you can scroll a long branch for free. The pane has an Overview of the
-grouped properties and a Raw tab with the API response; a service can add tabs of
-its own, such as the last log events of a log group.
-
-Doing things
-
-  F1   this help (F1 or escape closes it)
-  P    switch profile - everything loaded is dropped, reopen to refetch
-  R    switch region  - the same
-  W    time window - the Events tab is refetched through the new one
-
-  F3   view the highlighted resource in full (GetResource), as YAML
-  F4   edit the highlighted resource
-  x    open a shell on it - an EC2 instance (SSM) or an ECS task (exec).
-       CLITKA steps aside for the session and comes back when you exit.
-       To reach a task: open the ECS cluster leaf, then its Tasks sub-branch.
-
-  F5   collapse everything and forget it (this is also the retry after an error)
-  F9   actions for the highlighted resource (a type branch has none)
-  F10  quit
-
-
-A type shows how many resources it holds once loaded: "(98)", "(none)", or
-"(2000+)" when the display limit cut it short. A branch that could not be listed
-keeps the error on it - F5 retries.
-"""
 
 
 def _self_check() -> None:
@@ -170,9 +123,25 @@ def _self_check() -> None:
 
     assert all(name.startswith("AWS::") for name in TREE_TYPES)
     assert len(set(TREE_TYPES)) == len(TREE_TYPES), "duplicate branch"
-    # Every landing branch must also be a palette fallback, so a ListTypes denial
+    # Every default branch must also be a palette fallback, so a ListTypes denial
     # never leaves the user unable to reopen one of them.
     assert set(TREE_TYPES) <= set(COMMON_TYPES)
+
+    # The configured branches: kept in order, deduplicated, and nonsense dropped.
+    assert valid_types(["AWS::S3::Bucket"]) == ["AWS::S3::Bucket"]
+    assert valid_types([" AWS::S3::Bucket "]) == ["AWS::S3::Bucket"]
+    assert valid_types(["AWS::S3::Bucket", "AWS::S3::Bucket"]) == ["AWS::S3::Bucket"]
+    two = ["AWS::SQS::Queue", "AWS::S3::Bucket"]
+    assert valid_types(two) == two, "the user's order is the order"
+    for bad in ("", "   ", "S3::Bucket", "AWS::S3", "AWS::a::b::c", "AWS::x"):
+        assert valid_types([bad]) == [], bad
+
+    # An empty or unusable list must never produce an empty tree.
+    assert tree_types([]) == list(TREE_TYPES)
+    assert tree_types(["nonsense"]) == list(TREE_TYPES)
+    assert tree_types(["AWS::SQS::Queue"]) == ["AWS::SQS::Queue"]
+    # A configured branch need NOT be in COMMON_TYPES - the user asked for it.
+    assert tree_types(["AWS::Kinesis::Stream"]) == ["AWS::Kinesis::Stream"]
 
     assert "F9" in EXPLORER_HELP
     assert "page up/down" in EXPLORER_HELP, "the paging keys must be documented"
@@ -183,12 +152,13 @@ def _self_check() -> None:
         assert "F3   view" in text or "F4   edit" in text, text
         # The shell handoff has no menu-bar slot, so the help is its only home.
         assert "\n  x    open a shell" in text, text
+        assert "W    time window" in text, text
+        # `C` is the only key that writes to disk, so it must be documented.
+        assert "C    config" in text, text
     assert "enter / space" in TREE_HELP
     # The sub-branches are the only route to an ECS task, so they must be named.
     assert "Tasks sub-branch" in TREE_HELP
     assert "left / right" in TREE_HELP, "keyboard tab switching must be documented"
-    for text in (EXPLORER_HELP, TREE_HELP):
-        assert "W    time window" in text, text
     assert "1mo" in TREE_HELP, "the custom-duration syntax must be spelled out"
 
     print("[OK] resource types self-check passed")

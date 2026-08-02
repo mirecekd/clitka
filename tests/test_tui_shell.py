@@ -38,15 +38,18 @@ def test_status_bar_renders_without_network():
 
 
 def test_key_bar_slots_are_fixed_and_dimmable():
-    """P/R/W are letters (owner's call, 2026-07-31); F3/F4 are view and edit.
+    """P/R/W/C are letters (owner's call, 2026-07-31); F3/F4 are view and edit.
 
     There is no `L`: signing in was taken out of the TUI - `clitka auth login`.
+    `C` (config) joined on 2026-08-02, after the three session switches: it is
+    the one panel that writes to disk, so it belongs next to them.
     """
     assert [key for key, _ in SLOTS] == [
         "F1",
         "P",
         "R",
         "W",
+        "C",
         "F3",
         "F4",
         "F5",
@@ -60,6 +63,7 @@ def test_key_bar_slots_are_fixed_and_dimmable():
     assert "[b]F3[/b] View" in full
     assert "[b]F4[/b] Edit" in full
     assert "[b]W[/b] Window" in full
+    assert "[b]C[/b] Config" in full
     assert "[dim]P Profile[/dim]" in render_bar(frozenset({"F1", "F10"}))
 
 

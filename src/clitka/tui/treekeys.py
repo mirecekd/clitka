@@ -54,6 +54,7 @@ TREE_BINDINGS = [
     Binding("p,P", "app.switch_profile", "Profile", show=False),
     Binding("r,R", "app.switch_region", "Region", show=False),
     Binding("w,W", "app.switch_window", "Window", show=False),
+    Binding("c,C", "app.configure", "Config", show=False),
     Binding("f5", "reload", "Refresh", show=False),
     Binding("f9", "actions", "Actions", show=False),
     Binding("f10", "quit", "Quit", show=False),
@@ -69,7 +70,10 @@ def _self_check() -> None:
     assert "x" in keys
     # Every app-wide letter key has to be forwarded, or a Screen swallows it.
     forwarded = {b.key: b.action for b in TREE_BINDINGS if b.action.startswith("app.")}
-    assert set(forwarded) == {"p,P", "r,R", "w,W"}, forwarded
+    assert set(forwarded) == {"p,P", "r,R", "w,W", "c,C"}, forwarded
+    # `t` (live tail) and `c` (config) must not collide - both are bare letters.
+    assert "t" in keys and "c,C" in keys
+
     assert "ResourceTree Tree:focus" in TREE_CSS, "the focus outline is the only cue"
     print("[OK] tree keys self-check passed")
 

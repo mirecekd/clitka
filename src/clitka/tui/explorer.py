@@ -48,6 +48,7 @@ class ExplorerScreen(ViewEditHost, ShellHost, ActionHost, Screen[None]):
         Binding("p,P", "app.switch_profile", "Profile", show=False),
         Binding("r,R", "app.switch_region", "Region", show=False),
         Binding("w,W", "app.switch_window", "Window", show=False),
+        Binding("c,C", "app.configure", "Config", show=False),
         Binding("f5", "reload", "Refresh", show=False),
         Binding("f9", "actions", "Actions", show=False),
         Binding("f10", "quit", "Quit", show=False),

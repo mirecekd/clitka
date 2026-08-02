@@ -22,11 +22,14 @@ from textual.widgets import Static
 # F4 for what a resource screen actually needs: view and edit. Signing in is NOT
 # a slot: it is `clitka auth login` in a shell, then F5 here.
 
+# `C` (config) joined them on 2026-08-02: it is the one panel that *writes*, so it
+# belongs beside the three session switches rather than hidden in the help text.
 SLOTS: tuple[tuple[str, str], ...] = (
     ("F1", "Help"),
     ("P", "Profile"),
     ("R", "Region"),
     ("W", "Window"),
+    ("C", "Config"),
     ("F3", "View"),
     ("F4", "Edit"),
     ("F5", "Refresh"),
@@ -109,6 +112,7 @@ def _self_check() -> None:
     assert "[reverse]F1 Help[/reverse]" in render_bar(open_key="f1")
     assert "[reverse]R Region[/reverse]" in render_bar(open_key="r")
     assert "[reverse]W Window[/reverse]" in render_bar(open_key="w")
+    assert "[reverse]C Config[/reverse]" in render_bar(open_key="c")
 
     print("[OK] key bar self-check passed")
 

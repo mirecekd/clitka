@@ -6,6 +6,24 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _own_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point CLITKA's **own** two files at a temp dir, for every single test.
+
+    Autouse, because this is not a convenience - it is a correctness rule. Once
+    `config.toml` grew `tree_types` and `default_window`, a test that merely
+    *started the app* began reading the developer's real file: two
+    `test_tui_window` tests failed because the owner's saved `default_window`
+    replaced `timerange.DEFAULT`, and any test that saved would have rewritten a
+    real config. A test must never see, or touch, either file.
+
+    `CLITKA_CONFIG_DIR` and `CLITKA_STATE_DIR` exist for exactly this.
+    """
+    monkeypatch.setenv("CLITKA_CONFIG_DIR", str(tmp_path / "clitka-config"))
+    monkeypatch.setenv("CLITKA_STATE_DIR", str(tmp_path / "clitka-state"))
+
+
 SAMPLE_CONFIG = """\
 [default]
 region = eu-west-1

@@ -194,13 +194,40 @@ like they should: `left`/`right` walk the tabs, `up`/`down` scroll one. Pressing
 on a log group opens the **live tail**: events as they happen, `space` pauses, `w`
 wraps, `s` saves what is buffered to a file, `escape` stops the session.
 
-`F1`, `P`, `R` and `W` drop a panel out from under the menu bar - help, switching
-the profile or region **for the running session**, and the time window. The letters
-take either case; `clitka ctx use` is what makes a profile choice stick. Signing in
-is deliberately **not** a screen: run `clitka auth login` (or `aws sso login`) in a
-shell and press `F5` to pick the new token up. The status bar always names the
-CLITKA build plus the profile, account and region a call would use, and says
-READ-ONLY when writes are refused.
+`F1`, `P`, `R`, `W` and `C` drop a panel out from under the menu bar - help,
+switching the profile or region **for the running session**, the time window, and
+the configuration. The letters take either case. Signing in is deliberately **not**
+a screen: run `clitka auth login` (or `aws sso login`) in a shell and press `F5` to
+pick the new token up. The status bar always names the CLITKA build plus the
+profile, account and region a call would use, and says READ-ONLY when writes are
+refused.
+
+**`C` is the only screen that writes anything** - `P`, `R` and `W` change the
+running session and nothing else, which is deliberate: a keystroke that quietly
+edits a config file is a keystroke you cannot trust. `C` is where a session choice
+is promoted to a default on purpose, so every row names the value it would save
+("save eu-central-1") rather than merely the setting. It offers:
+
+- **the explorer's branches** (`b`) - a checklist of resource types where `space`
+  adds or removes one and `/` filters; the candidates are the same live
+  `ListTypes` the `:` palette uses. This is what makes the first screen *yours*
+  instead of the eleven types CLITKA ships with, and `d` puts those back. The list
+  shows the types already in your tree plus a window of the rest, because a real
+  account exposes ~1800 of them - **`/` is how you reach a type that is not
+  on screen**, and it is faster than scrolling to it would have been.
+
+- **the default profile, region and time window** - the same three things `P`, `R`
+  and `W` switch, made to stick. `clitka ctx use` does the first two from a shell.
+- **read-only by default**, and **"start where I stopped"** (off by default).
+
+Where those live follows the XDG split rather than one file for everything:
+`~/.config/clitka/config.toml` holds what you *chose*, and
+`~/.local/state/clitka/state.toml` holds what CLITKA *noticed* - the profile and
+region in force when the last session ended. Only the second is written without
+being asked, and only when "start where I stopped" is on; it is also the weakest
+voice in the room, so it can fill a gap but never beat a `--profile` flag,
+`AWS_PROFILE`, or the config file. Both honour `XDG_CONFIG_HOME` / `XDG_STATE_HOME`.
+
 
 ## Keyboard
 
@@ -215,12 +242,14 @@ Everything, in one place. Letter keys take either case.
 | `P` | switch profile - this session only |
 | `R` | switch region - this session only |
 | `W` | time window - how far back the log preview and `F9` look |
+| `C` | configuration - **the only screen that saves anything**: which types the explorer opens with, the default profile / region / time window, read-only, and "start where I stopped" |
 | `F3` | view the selected resource in full (`GetResource`), as YAML |
 | `F4` | edit the selected resource |
 | `x` | open a shell on it - an EC2 instance (SSM) or an ECS task (`ecs execute-command`). CLITKA steps aside for the session and comes back when you exit |
 | `F5` | refresh |
 | `F9` | actions for the selected resource |
 | `F10` / `q` | quit |
+
 
 ### The resource tree (the landing screen)
 
@@ -252,8 +281,23 @@ Everything, in one place. Letter keys take either case.
 | `n` / `y` | 1 month / 1 year |
 | `c` | custom - type a duration: `90m`, `2h`, `3d`, `2w`, `1mo`, `1y` (a bare number means minutes) |
 
-It starts at `1h` and lasts for the running session only.
-`clitka logs search --since 3h` is the same window from a shell.
+It starts at `1h`, or at whatever `C` saved, and lasts for the running session
+only. `clitka logs search --since 3h` is the same window from a shell.
+
+### The configuration panel (`C`)
+
+| Key | What it saves |
+|---|---|
+| `b` | the explorer's branches - `space` toggles a type, `/` filters, `escape` is done |
+| `p` / `r` | this session's profile / region, as the default to start in |
+| `w` | this session's time window, as the default to start in |
+| `o` | read-only by default |
+| `l` | start where the last session stopped |
+| `d` | reset the branches to the built-in list |
+
+Everything here is written to `~/.config/clitka/config.toml` and the panel says
+what it wrote. Nothing else in the TUI writes anything.
+
 
 ### The flat explorer (what `:` opens outside the tree)
 
@@ -273,9 +317,10 @@ It starts at `1h` and lasts for the running session only.
 | `escape` | stop the session and go back |
 
 Configuration precedence is `--profile/--region` flag, then `AWS_PROFILE` /
-`AWS_REGION`, then `~/.config/clitka/config.toml`, then the AWS defaults.
-CLITKA only reads `~/.aws/*`; its own settings go to its own file. The SSO token
-is written to `~/.aws/sso/cache` in the exact `aws` CLI v2 layout, so
+`AWS_REGION`, then `~/.config/clitka/config.toml`, then
+`~/.local/state/clitka/state.toml` where "start where I stopped" is on, then the
+AWS defaults. CLITKA only reads `~/.aws/*`; its own settings go to its own files.
+The SSO token is written to `~/.aws/sso/cache` in the exact `aws` CLI v2 layout, so
 `clitka auth login` and `aws sso login` are interchangeable.
 
 Roadmap, in order:
@@ -287,9 +332,12 @@ Roadmap, in order:
    API Gateway invoke, Systems Manager - Parameter Store, documents and
    run-command (done)
 
-5. S3 browser and DynamoDB
-6. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
-7. Distribution: PyPI, standalone binaries, Docker image, plugin guide
+5. Configuration (`C`) - the explorer's branches, the startup defaults, and
+   starting where the last session stopped (done)
+6. S3 browser and DynamoDB
+7. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
+8. Distribution: PyPI, standalone binaries, Docker image, plugin guide
+
 
 ## Planned coverage
 

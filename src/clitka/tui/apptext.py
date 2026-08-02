@@ -13,8 +13,10 @@ CLITKA - CLI ToolKit for AWS
   P    switch profile
   R    switch region
   W    time window - how far back the log preview looks
+  C    config - what the explorer opens with, and the defaults
 
   F3   view the selected resource in full
+
   F4   edit the selected resource
   F5   refresh identity
   F10  quit
@@ -29,8 +31,10 @@ HELP = """\
   P    switch profile - for this session only
   R    switch region  - for this session only
   W    time window - how far back the log preview and F9 look
+  C    config - the only screen that saves anything to disk
 
   F3   view  - the selected resource in full (GetResource), as YAML
+
   F4   edit  - the selected resource
   F5   refresh
 
@@ -92,8 +96,11 @@ def _self_check() -> None:
     # point of them, and `W` was added late.
     for text in (WELCOME, HELP):
         assert "W    time window" in text, text
+        # `C` writes to disk, so it is the last key that may go undocumented.
+        assert "C    config" in text, text
         # Login was taken out of the TUI: no L key, and the shell command instead.
         assert "L  " not in text, text
+
     assert "clitka auth login" in HELP
 
     assert "1mo" in HELP, "the custom-duration syntax must be spelled out"

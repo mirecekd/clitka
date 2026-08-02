@@ -18,26 +18,32 @@ job - `clitka auth login` - and F5 picks the fresh token up.
 
 from __future__ import annotations
 
+from contextlib import suppress
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
 from textual.widgets import Static
 
+from clitka.core import clitkaconfig
+from clitka.core import timerange as tr
 from clitka.core.context import Context
+from clitka.tui.appstate import SessionMemory
 from clitka.tui.appswitch import ContextSwitcher
 from clitka.tui.apptext import HELP, WELCOME
+from clitka.tui.configpanel import ConfigPanel
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.explorer import COMMON_TYPES, ExplorerScreen
 from clitka.tui.keybar import KeyBar
 from clitka.tui.picker import CommandPalette
 from clitka.tui.restree import ResourceTree
-from clitka.tui.restypes import TREE_TYPES
+from clitka.tui.restypes import tree_types
 from clitka.tui.status import StatusBar
 from clitka.tui.switch import type_names
 from clitka.tui.windowpick import WindowSwitcher
 
 
-class ClitkaApp(ContextSwitcher, WindowSwitcher, App[None]):
+class ClitkaApp(ContextSwitcher, WindowSwitcher, ConfigPanel, SessionMemory, App[None]):
     """Root application. One instance per process."""
 
     TITLE = "CLITKA"
@@ -54,6 +60,7 @@ class ClitkaApp(ContextSwitcher, WindowSwitcher, App[None]):
         Binding("p,P", "switch_profile", "Profile", show=False),
         Binding("r,R", "switch_region", "Region", show=False),
         Binding("w,W", "switch_window", "Window", show=False),
+        Binding("c,C", "configure", "Config", show=False),
         Binding("f5", "refresh", "Refresh", show=False),
         Binding("f10", "quit", "Quit", show=False),
         Binding("q", "quit", "Quit", show=False),
@@ -61,7 +68,16 @@ class ClitkaApp(ContextSwitcher, WindowSwitcher, App[None]):
 
     def __init__(self, context: Context | None = None, open_tree: bool = True) -> None:
         super().__init__()
-        self.context = context or Context.from_env()
+        self.config = clitkaconfig.load()
+        self.context = context or self.opening_context()
+
+        # The session starts on the configured window, not the built-in 1h. `W`
+        # still overrides it for this run only.
+        if self.config.default_window:
+            # A window nobody can parse is not worth refusing to start over.
+            with suppress(ValueError):
+                tr.select(tr.parse(self.config.default_window))
+
         # Open on the resource tree. `open_tree=False` stays on the welcome text - only
         # the tests that are about the shell itself, or a single explorer screen,
         # pass that.
@@ -74,6 +90,7 @@ class ClitkaApp(ContextSwitcher, WindowSwitcher, App[None]):
         self.identity: str = ""
 
     def compose(self) -> ComposeResult:
+
         yield KeyBar()
         yield Container(Static(WELCOME, id="content"), id="body")
         yield StatusBar(self.context)
@@ -86,7 +103,11 @@ class ClitkaApp(ContextSwitcher, WindowSwitcher, App[None]):
         """
         self.refresh_identity()
         if self.open_tree:
-            self.push_screen(ResourceTree(self.context, TREE_TYPES))
+            self.push_screen(ResourceTree(self.context, tree_types(self.config.tree_types)))
+
+    def on_unmount(self) -> None:
+        """Every exit route passes through here, including F10 and `q`."""
+        self.remember_session()
 
     # --- identity ---------------------------------------------------------
 

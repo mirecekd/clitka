@@ -6,14 +6,17 @@ a single flat table.
 
 ponytail: the writer only supports str / bool / int / float / list-of-str at the
 top level and one `[table]` per nested dict. Ceiling: no arrays of tables, no
-deep nesting. Upgrade path: depend on `tomli-w` and delete `_dumps`.
+deep nesting. Upgrade path: depend on `tomli-w` and delete `dumps`.
+
+`dumps` is public because `core/clitkastate.py` writes a second, sibling file
+(`~/.local/state/clitka/state.toml`) and one 20-line emitter is enough for both.
 """
 
 from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -38,12 +41,25 @@ def config_path() -> Path:
 
 @dataclass(frozen=True)
 class ClitkaConfig:
-    """Persisted user preferences. Every field is optional."""
+    """Persisted user preferences. Every field is optional.
+
+    Everything here is a *deliberate* choice - nothing writes this file unless the
+    user asked (`clitka ctx use`, or `C` in the TUI). Where the last session
+    happened to be is a different question and lives in `core/clitkastate.py`.
+    """
 
     profile: str | None = None
     region: str | None = None
     read_only: bool = False
     theme: str = "default"
+    # The branches the explorer opens with. Empty means "use the built-in list" -
+    # an empty tree is never what anyone wanted, so it is not a reachable state.
+    tree_types: list[str] = field(default_factory=list)
+    # The time window a session starts on, as a `core.timerange` label ("1h").
+    default_window: str | None = None
+    # Start where the last session stopped, by reading `state.toml`. Off by
+    # default: a fresh install must behave exactly as it did before this existed.
+    remember_last: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -57,6 +73,9 @@ _TYPES: dict[str, type] = {
     "region": str,
     "read_only": bool,
     "theme": str,
+    "tree_types": list,
+    "default_window": str,
+    "remember_last": bool,
 }
 
 
@@ -93,10 +112,13 @@ def _toml_value(value: Any) -> str:
     return f'"{escaped}"'
 
 
-def _dumps(data: dict[str, Any]) -> str:
+def dumps(data: dict[str, Any], header: str = "") -> str:
+    """Emit a flat TOML document. Shared with `core/clitkastate.py`."""
     scalars = {k: v for k, v in data.items() if not isinstance(v, dict)}
     tables = {k: v for k, v in data.items() if isinstance(v, dict)}
-    lines = ["# CLITKA configuration - managed by `clitka ctx use` and friends.", ""]
+    title = header or "CLITKA configuration - managed by `clitka ctx use` and the C panel"
+    lines = [f"# {title}", ""]
+
     lines += [f"{key} = {_toml_value(value)}" for key, value in scalars.items()]
     for name, table in tables.items():
         lines += ["", f"[{name}]"]
@@ -110,7 +132,8 @@ def save(cfg: ClitkaConfig, path: Path | None = None) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".tmp")
     try:
-        tmp.write_text(_dumps(cfg.as_dict()), encoding="utf-8")
+        tmp.write_text(dumps(cfg.as_dict()), encoding="utf-8")
+
         os.chmod(tmp, 0o600)
         os.replace(tmp, target)
     except OSError as exc:
@@ -139,6 +162,29 @@ def _self_check() -> None:
         assert again.read_only is True, again
         assert load(target) == again
         assert oct(target.stat().st_mode)[-3:] == "600"
+
+        # The C-panel settings survive a round trip, list included.
+        types = ["AWS::S3::Bucket", "AWS::Lambda::Function"]
+        update(target, tree_types=types, default_window="3h", remember_last=True)
+        back = load(target)
+        assert back.tree_types == types, back
+        assert back.default_window == "3h", back
+        assert back.remember_last is True, back
+        # ...and the older keys were not lost by the read-modify-write.
+        assert back.profile == "demo", back
+
+        # A key a newer CLITKA wrote is ignored, not fatal.
+        target.write_text('profile = "demo"\nfrom_the_future = 1\n', encoding="utf-8")
+        assert load(target).profile == "demo"
+        # A key of the wrong type IS fatal - the user typed it, so say so.
+        target.write_text("tree_types = 7\n", encoding="utf-8")
+        try:
+            load(target)
+        except ConfigError:
+            pass
+        else:
+            raise AssertionError("a wrongly-typed key must be reported")
+
     print("[OK] clitkaconfig self-check passed")
 
 
