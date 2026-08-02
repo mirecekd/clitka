@@ -19,13 +19,26 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Any
 
+# `Resource` and `columns_for` are the boto3-free half, split out for the 8 kB
+# rule and re-exported here so every caller still imports one module.
+from clitka.core.ccmodel import Resource, columns_for
 from clitka.core.context import Context
 from clitka.core.errors import ClitkaError, wrap_aws_errors
 from clitka.core.redact import redact
-from clitka.core.resname import name_of
+
+__all__ = [
+    "AdditionalInputsError",
+    "Resource",
+    "columns_for",
+    "delete_resource",
+    "get_resource",
+    "iter_resources",
+    "list_resources",
+    "list_types",
+]
+
 
 _PAGE = 100
 # ponytail: types the API cannot enumerate are discovered by failing the call,
@@ -45,39 +58,6 @@ class AdditionalInputsError(ClitkaError):
             "Hint: pass the parent identifier, e.g. "
             '--input \'{"VpcId": "vpc-1234"}\''
         )
-
-
-@dataclass(frozen=True)
-class Resource:
-    """One row of the explorer."""
-
-    type_name: str
-    identifier: str
-    properties: dict[str, Any]
-
-    def name(self) -> str:
-        """A human-readable name, or "" when the identifier is all there is.
-
-        `i-0abc...` is not what anyone calls the machine - the `Name` tag is
-        (owner's request). The guessing lives in `core/resname.py`.
-        """
-        return name_of(self.identifier, self.properties)
-
-    def row(self) -> dict[str, Any]:
-        """Flat row: identifier, the name if there is one, then the properties.
-
-        `name` is *derived*, not a property - `previewmodel.resource_from` drops
-        it again so it never shows up in the Raw tab.
-        """
-
-        row: dict[str, Any] = {"identifier": self.identifier}
-        name = self.name()
-        if name:
-            row["name"] = name
-        for key, value in self.properties.items():
-            if key not in row:
-                row[key] = value
-        return row
 
 
 def _parse_properties(type_name: str, raw: str | None) -> dict[str, Any]:
@@ -212,22 +192,3 @@ def delete_resource(ctx: Context, type_name: str, identifier: str) -> dict[str, 
         "status_message": event.get("StatusMessage", ""),
         "error_code": event.get("ErrorCode", ""),
     }
-
-
-def columns_for(resources: list[Resource], limit: int = 6) -> list[str]:
-    """Pick table columns: identifier, `name` if any row has one, then the rest.
-
-    Cloud Control returns a different property subset per type (and sometimes per
-    resource), so the columns are derived from the data rather than declared.
-    `name` is put second on purpose: on EC2 the identifier alone is unreadable.
-    """
-    counts: dict[str, int] = {}
-    for resource in resources:
-        for key in resource.properties:
-            counts[key] = counts.get(key, 0) + 1
-    head = ["identifier"]
-    if any(resource.name() for resource in resources):
-        head.append("name")
-    ranked = sorted(counts, key=lambda key: (-counts[key], key))
-    chosen = [key for key in ranked if key not in head][: max(limit - len(head), 0)]
-    return [*head, *chosen]
