@@ -72,8 +72,8 @@ class ResourceNode:
         return f"{head}   [dim]{detail}[/dim]" if detail else head
 
 
-def sort_key(resource: cc.Resource) -> tuple[str, str]:
-    """How resources are ordered in a branch: by what the label leads with.
+def sort_key(resource: cc.Resource) -> tuple[int, str, str]:
+    """How resources are ordered in a branch: containers first, then by the label.
 
     The leaf shows the **name** first and only falls back to the identifier, so
     that is what the order has to follow - sorting by identifier would look
@@ -81,9 +81,16 @@ def sort_key(resource: cc.Resource) -> tuple[str, str]:
     `Asrp-...` and `amplify-...` otherwise splits into two alphabets, and the
     identifier breaks the tie so the order is stable for two resources sharing
     a name.
+
+    A trailing `/` sorts **first**, because every file browser ever written puts
+    the folders above the files and an S3 prefix is exactly that. Nothing else in
+    CLITKA has an identifier ending in a slash, so this costs every other type
+    nothing. `ChildLoader._children_done` sorts with this function itself, so a
+    plugin could not impose the order from outside even if it wanted to.
     """
     label = resource.name() or resource.identifier
-    return (label.casefold(), resource.identifier.casefold())
+    container = 0 if label.endswith("/") or resource.identifier.endswith("/") else 1
+    return (container, label.casefold(), resource.identifier.casefold())
 
 
 def summarise(resource: cc.Resource, limit: int = 2) -> str:
@@ -149,6 +156,16 @@ def _self_check() -> None:
     # Case must not split the list into two alphabets.
     mixed = [made("Zeta"), made("alpha")]
     assert [one.identifier for one in sorted(mixed, key=sort_key)] == ["alpha", "Zeta"]
+
+    # Folders first: an S3 prefix ends in `/` and belongs above the files, however
+    # the alphabet feels about it. `a.log` would otherwise sort above `logs/`.
+    files = [made("b/a.log"), made("b/logs/"), made("b/z.txt"), made("b/archive/")]
+    assert [one.identifier for one in sorted(files, key=sort_key)] == [
+        "b/archive/",
+        "b/logs/",
+        "b/a.log",
+        "b/z.txt",
+    ]
 
     # An EC2 instance leads with its Name tag, not with the instance id.
     ec2 = ResourceNode(
