@@ -20,6 +20,7 @@ BUILTIN_SERVICES: tuple[str, ...] = (
     "clitka.services.ecs",
     "clitka.services.apigw",
     "clitka.services.ssm",
+    "clitka.services.s3",
 )
 
 
@@ -77,6 +78,11 @@ def previews() -> list[Any]:
 def listers() -> list[Any]:
     """Flatten child listers (tree sub-branches) from all services."""
     return [one for group in get_manager().hook.clitka_listers() for one in group]
+
+
+def viewers() -> list[Any]:
+    """Flatten viewers (how F3 reads a type) from all services."""
+    return [one for group in get_manager().hook.clitka_viewers() for one in group]
 
 
 def _self_check() -> None:

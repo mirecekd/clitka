@@ -72,7 +72,11 @@ def test_the_registry_hands_the_tab_to_the_pane():
     assert any(tab.id == "logs.events" for tab in tabs), [tab.id for tab in tabs]
     offered = pv.available(tabs, ref())
     assert [tab.id for tab in offered] == ["logs.events"]
-    assert pv.available(tabs, ref("AWS::S3::Bucket", "b")) == []
+    # The point is that the LOGS tab does not apply to a bucket. Other plugins do
+    # offer their own there (S3 puts `Contents` on one), so this must not assert
+    # that a bucket has no tabs at all.
+    elsewhere = [tab.id for tab in pv.available(tabs, ref("AWS::S3::Bucket", "b"))]
+    assert "logs.events" not in elsewhere, elsewhere
 
 
 def test_the_registry_hands_the_actions_to_f9():

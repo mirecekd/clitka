@@ -30,9 +30,10 @@ invoke, deploy, tail, exec, upload, execute.
 ## Status
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
-resource explorer, CloudWatch Logs, Lambda, ECR, EC2, ECS, API Gateway and Systems
-Manager work; the remaining per-service modules are being built milestone by
-milestone.
+resource explorer, CloudWatch Logs, Lambda, ECR, EC2, ECS, API Gateway, Systems
+Manager and the S3 browser work; the remaining per-service modules are being built
+milestone by milestone.
+
 
 
 What works today:
@@ -158,7 +159,6 @@ properties enter the app, **not** in the SSM plugin - because `GetResource` on a
 parameter volunteers the ciphertext whether anyone asked or not, so `F3` and the
 Raw tab would otherwise walk straight around the rule.
 
-
 `run` exists for the same reason `lambda invoke` does. `aws ssm send-command`
 exits 0 as soon as AWS has *accepted* the request - before the script has run at
 all - so it cannot tell you anything. This waits, prints stdout and stderr, and
@@ -168,7 +168,46 @@ required parameter is missing, the document does not run on that platform.
 Running a document is deliberately **not** an `F9` action - `SendCommand` executes
 a script on someone's machine and there is no undo.
 
+## S3
 
+
+```bash
+clitka s3 buckets                             # every bucket in the account
+clitka s3 ls my-bucket                        # one level: folders, then files
+clitka s3 ls my-bucket/logs/2026/             # any prefix - or an s3:// URI
+clitka s3 get my-bucket                       # ...including which region it is in
+```
+
+**A bucket is a tree, not a listing, and that is the point.** `enter` on a bucket
+in the explorer grows an `Objects` sub-branch; open a folder inside it and it grows
+its own, as deep as the bucket goes. Folders sort above files, a folder shows only
+its last path segment rather than repeating its whole ancestry, and a level that
+was cut short at the display cap **says so** instead of quietly showing part of it.
+
+Two things worth knowing, both measured rather than assumed:
+
+- **A bucket in another region needs nothing special.** `clitka s3 ls` reaches a
+  bucket in `eu-north-1` from an `eu-central-1` profile, because botocore follows
+  S3's redirect itself. The console's regional view hides such a bucket; this does
+  not.
+- **`clitka s3 buckets` reports no region per bucket**, deliberately. `ListBuckets`
+  does not include it, so a column would cost one extra API call for every bucket
+  in the account. `clitka s3 get` answers that question for the one you care about.
+
+**`F3` on an object shows the file** - the owner asked for exactly that, and it is
+the reason CLITKA grew a fifth plugin hook. `F3` had gone straight to Cloud
+Control, which has no answer for an S3 object (that type is CLITKA's own), so it
+used to print the size and the ETag instead of the contents. Now the S3 plugin
+claims it: text as text, and anything that is not text as a **hex dump** of its
+head, since the magic bytes tell you more than a screen of mojibake. `F3` on a
+folder lists the folder. Whether something is text is decided by **trying to
+decode it**, not by its `ContentType` - a schema in the owner's own account is
+served as `binary/octet-stream` and is perfectly good UTF-8.
+
+Downloading, uploading, deleting and presigning are **not** here yet: `F9` offers
+the `aws s3` command for what the cursor is on instead, the same rule
+`lambda invoke` and `ecr login` follow. A keystroke that writes to your disk, or
+that cannot be un-run, waits for a screen that names the file first.
 
 
 The TUI is split: the tree of resource types on the left, a preview of what you
@@ -243,7 +282,7 @@ Everything, in one place. Letter keys take either case.
 | `R` | switch region - this session only |
 | `W` | time window - how far back the log preview and `F9` look |
 | `C` | configuration - **the only screen that saves anything**: which types the explorer opens with, the default profile / region / time window, read-only, and "start where I stopped" |
-| `F3` | view the selected resource in full (`GetResource`), as YAML |
+| `F3` | view the selected resource in full - as YAML for anything Cloud Control knows, and as **the file itself** for an S3 object |
 | `F4` | edit the selected resource |
 | `x` | open a shell on it - an EC2 instance (SSM) or an ECS task (`ecs execute-command`). CLITKA steps aside for the session and comes back when you exit |
 | `F5` | refresh |
@@ -334,7 +373,8 @@ Roadmap, in order:
 
 5. Configuration (`C`) - the explorer's branches, the startup defaults, and
    starting where the last session stopped (done)
-6. S3 browser and DynamoDB
+6. S3 browser (done) and DynamoDB
+
 7. CloudFormation, SAM and CDK wrappers, Step Functions, EventBridge Schemas
 8. Distribution: PyPI, standalone binaries, Docker image, plugin guide
 

@@ -41,6 +41,27 @@ async def _open_first_bucket(pilot, app):
     await pilot.pause()
 
 
+async def _seek(pilot, app, identifier: str) -> None:
+    """Put the cursor on the leaf carrying `identifier`.
+
+    Deliberately a search rather than a count of `down` presses: `enter` on a
+    resource both previews it *and* unfolds its sub-branches where a plugin has
+    any, so a bucket now grows an `Objects` node and "one down" is no longer the
+    next bucket. The same lesson `test_tui_viewedit`'s helper learned when the
+    tree started sorting itself.
+    """
+    from clitka.tui.treemodel import ResourceNode
+
+    tree = app.screen.rtree
+    for index, line in enumerate(tree._tree_lines):
+        data = line.path[-1].data
+        if isinstance(data, ResourceNode) and data.resource.identifier == identifier:
+            tree.cursor_line = index
+            await pilot.pause()
+            return
+    raise AssertionError(f"{identifier} is not in the tree")
+
+
 # --- core tabs ------------------------------------------------------------
 
 
@@ -99,7 +120,11 @@ async def test_enter_on_a_resource_fills_the_pane(offline):
         pane = app.screen.query_one(PreviewPane)
         assert pane.ref is not None
         assert pane.ref.identifier == "bucket-one"
-        assert [tab.id for tab in pane.tabs] == [pv.OVERVIEW, pv.RAW]
+        # Overview and Raw come first and always; a plugin may add its own after
+        # them (the S3 plugin puts `Contents` on a bucket), so this must not
+        # assert that nothing else is ever there.
+        assert [tab.id for tab in pane.tabs][:2] == [pv.OVERVIEW, pv.RAW]
+
         assert "bucket-one" in pane.body_text(pv.OVERVIEW)
 
 
@@ -133,10 +158,13 @@ async def test_previewing_a_second_resource_rebuilds_the_tabs(offline):
         pane = app.screen.query_one(PreviewPane)
         first = pane.generation
 
-        await pilot.press("down")
+        # Seek it: `enter` on bucket-one also unfolded its `Objects` sub-branch, so
+        # one `down` is that node now, not the next bucket.
+        await _seek(pilot, app, "bucket-two")
         await pilot.press("enter")
         await pilot.pause()
         assert pane.ref.identifier == "bucket-two"
+
         assert pane.generation > first
         assert "bucket-two" in pane.body_text(pv.OVERVIEW)
 

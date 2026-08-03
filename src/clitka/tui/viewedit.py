@@ -99,13 +99,25 @@ class ViewEditHost:
 
 
 def view_yaml(context: Context, ref: act.ResourceRef) -> str:
-    """The full resource as YAML. Falls back to the row we already have.
+    """The full resource, as whatever reading it means for its type.
 
-    A type that Cloud Control cannot `GetResource` (or an identity without the
-    permission) must still show *something* - the listing row is better than an
-    error, and it says which one it is showing.
+    **A plugin gets asked first** (`core/viewer.clitka_viewers`), because
+    `GetResource` is the right answer only for a type Cloud Control knows. The
+    owner's report: F3 on an S3 object showed its size and ETag, since
+    `AWS::S3::Object` is CLITKA's own type string and there is nothing to fetch.
+    Now `services/s3` claims it and F3 shows the file.
+
+    Everything unclaimed behaves exactly as before: Cloud Control, then the
+    listing row as a last resort - a type it cannot `GetResource` (or an identity
+    without the permission) must still show *something*, and say which it is.
     """
     import yaml
+
+    from clitka.core import viewer as vw
+
+    claimed = vw.first_for(ref)
+    if claimed is not None:
+        return claimed.view(context, ref)
 
     try:
         resource = cc.get_resource(context, ref.type_name, ref.identifier)

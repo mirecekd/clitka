@@ -48,3 +48,13 @@ class ClitkaSpec:
         has no resource type at all), so the thing becomes clickable rather than
         only printable.
         """
+
+    @hookspec
+    def clitka_viewers(self) -> list[Any]:
+        """Return Viewer objects - how F3 reads a type Cloud Control cannot fetch.
+
+        The owner asked to look at the *data* in an S3 object through F3, and
+        `GetResource` has no answer for `AWS::S3::Object` because CLITKA invented
+        that type. A plugin answers this hook to say "F3 on my type means this";
+        everything unclaimed still goes through Cloud Control.
+        """
