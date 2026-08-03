@@ -204,10 +204,29 @@ folder lists the folder. Whether something is text is decided by **trying to
 decode it**, not by its `ContentType` - a schema in the owner's own account is
 served as `binary/octet-stream` and is perfectly good UTF-8.
 
+**`F4` opens the object in `$EDITOR` and puts it back when you save.** CLITKA steps
+aside for the editor exactly as it does for a shell, so it is your own vim or nano
+with your own config, and it comes back when you exit. Four things it refuses, each
+because the alternative loses data quietly:
+
+- **read-only mode** - refused before anything is even downloaded, and it says so
+  rather than doing nothing;
+- **a binary object** - the screen shows a hex dump, and saving that back would
+  replace a PNG with its own hex dump;
+- **an object too big to have been read whole** - saving it would chop the rest off;
+- **an unchanged file** - a no-op `PutObject` still rewrites the ETag and
+  `LastModified`, which lies to everything watching the bucket. Quitting the editor
+  in a way that *deletes* the temp file counts as unchanged too: it must never be
+  read as "empty the object".
+
+The content type is sent again with the body, because `PutObject` replaces an object
+wholesale and anything not sent again is lost.
+
 Downloading, uploading, deleting and presigning are **not** here yet: `F9` offers
 the `aws s3` command for what the cursor is on instead, the same rule
 `lambda invoke` and `ecr login` follow. A keystroke that writes to your disk, or
 that cannot be un-run, waits for a screen that names the file first.
+
 
 
 The TUI is split: the tree of resource types on the left, a preview of what you
@@ -221,7 +240,7 @@ where they have one - the `Name` tag on an EC2 instance, say - with the identifi
 because `i-0abc1234...` tells nobody which machine that is. `:` adds any other type
 the account exposes as a further branch, `tab` moves between the tree and the
 preview (the focused side is outlined), `F3` views the selected resource in full,
-`F4` is the edit slot, `F9` opens the actions for it, `F5` forgets everything,
+`F4` edits it where that means something (an S3 object), `F9` opens the actions for it, `F5` forgets everything,
 `F10` quits.
 
 The preview has an Overview of the grouped properties and a Raw tab with the API
@@ -283,7 +302,7 @@ Everything, in one place. Letter keys take either case.
 | `W` | time window - how far back the log preview and `F9` look |
 | `C` | configuration - **the only screen that saves anything**: which types the explorer opens with, the default profile / region / time window, read-only, and "start where I stopped" |
 | `F3` | view the selected resource in full - as YAML for anything Cloud Control knows, and as **the file itself** for an S3 object |
-| `F4` | edit the selected resource |
+| `F4` | edit it - an S3 object opens in `$EDITOR` and is put back when you save; other types say so |
 | `x` | open a shell on it - an EC2 instance (SSM) or an ECS task (`ecs execute-command`). CLITKA steps aside for the session and comes back when you exit |
 | `F5` | refresh |
 | `F9` | actions for the selected resource |

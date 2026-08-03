@@ -23,6 +23,7 @@ from __future__ import annotations
 from clitka.core import s3read
 from clitka.core.actions import ResourceRef
 from clitka.core.context import Context
+from clitka.core.s3model import human_size
 from clitka.core.viewer import Viewer
 from clitka.services.s3.actions import is_object, is_prefix, listing_block, location_of
 
@@ -60,6 +61,38 @@ def view_object(ctx: Context, ref: ResourceRef) -> str:
     return _framed(body, shown)
 
 
+def edit_object(ctx: Context, ref: ResourceRef):
+    """F4 on an object: `$EDITOR`, then put it back if it changed.
+
+    The owner asked why F4 could not do this (2026-08-03) - read-only was not the
+    reason, F4 simply was not wired up for any type at all.
+
+    Everything that can refuse does so **here**, before the caller suspends the app:
+    read-only, a binary body, a body too big to have been read whole, no `$EDITOR`.
+    `prepare_edit` raises for each with a sentence naming the object.
+    """
+    from clitka.core import s3write
+    from clitka.tui.viewedit import EditSession
+
+    where = location_of(ref)
+    edit = s3write.prepare_edit(ctx, where.identifier)
+
+    def finish() -> str:
+        """Called after the editor exits. Nothing here may raise silently."""
+        try:
+            if not edit.changed():
+                # Not a failure - and a no-op PutObject would still rewrite the
+                # ETag and LastModified, which lies to everything watching.
+                return f"[dim]{where.uri} unchanged - nothing was written[/dim]"
+            raw = edit.current()
+            sent = s3write.put_object(ctx, where.identifier, raw, edit.body.content_type)
+            return f"Saved {human_size(sent)} to {where.uri}"
+        finally:
+            edit.cleanup()
+
+    return EditSession(handoff=edit.handoff(), finish=finish, label=f"Edit  {where.uri}")
+
+
 def view_prefix(ctx: Context, ref: ResourceRef) -> str:
     """F3 on a folder: what is in it. Failing would be the only worse answer.
 
@@ -71,7 +104,15 @@ def view_prefix(ctx: Context, ref: ResourceRef) -> str:
 
 
 VIEWERS: tuple[Viewer, ...] = (
-    Viewer(id="s3.object", view=view_object, applies_to=is_object, label="Object"),
+    Viewer(
+        id="s3.object",
+        view=view_object,
+        applies_to=is_object,
+        label="Object",
+        # F4. A prefix deliberately has none: there is no "folder" in S3 to edit,
+        # only the keys under it.
+        edit=edit_object,
+    ),
     Viewer(id="s3.prefix", view=view_prefix, applies_to=is_prefix, label="Prefix"),
 )
 
@@ -98,6 +139,22 @@ def _self_check() -> None:
     assert not any(one.applies_to(bucket) for one in VIEWERS), (
         "a bucket is a real Cloud Control type - do not intercept it"
     )
+
+    # F4 belongs to the object only. There is no "folder" in S3 to edit.
+    assert claimed["s3.object"].editable
+    assert not claimed["s3.prefix"].editable
+
+    # And read-only refuses BEFORE anything is downloaded or any editor opens -
+    # the owner's actual question ("musim vypnout readonly?"): the answer is that
+    # read-only says so plainly, rather than F4 quietly doing nothing.
+    from clitka.core.errors import ReadOnlyError
+
+    try:
+        edit_object(Context(read_only=True), obj)
+    except ReadOnlyError as exc:
+        assert "read-only" in str(exc), exc
+    else:  # pragma: no cover - the guard is the point
+        raise AssertionError("F4 must refuse in read-only mode, and say so")
 
     # Markup in the file must not be read AS markup - the logs plugin's lesson.
     # Measured rather than assumed: `escape` only touches what looks like a tag,

@@ -16,6 +16,10 @@ contract `ActionHost` uses, so a screen gets all three keys for one mixin line.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
 from clitka.core import actions as act
 from clitka.core import cloudcontrol as cc
 from clitka.core.context import Context
@@ -23,21 +27,36 @@ from clitka.core.output import jsonable
 
 NOTHING = "Nothing selected - move the cursor onto a resource first."
 
-# ponytail: no editor yet. Ceiling: F4 explains itself rather than editing, on
-# every type. Upgrade path: an `editors` hook in the shape of `clitka_previews`,
-# so `services/s3` can publish "edit an object's body" and Cloud Control's
-# `update_resource` can back a generic property editor.
+# ponytail: F4 works for whatever a plugin claims (S3 objects today) and explains
+# itself for everything else. Ceiling: Cloud Control's own `update_resource` is not
+# wired up, so a bucket's *properties* still cannot be edited here. Upgrade path: a
+# generic `Viewer.edit` in `services/resources` that round-trips the YAML.
 EDIT_HINT = """\
 Editing is not wired up for this type yet.
 
-What F4 will do, per type:
-
-  AWS::S3::Object          edit the object body and put it back
-  anything Cloud Control    edit the properties and call UpdateResource
+An S3 object opens in $EDITOR and is put back when you save; that is the shape the
+rest will follow. For a Cloud Control resource the plan is to edit its properties
+and call UpdateResource.
 
 For now, F9 has the actions that do work on this resource, and F3 shows it in
 full.
 """
+
+
+@dataclass
+class EditSession:
+    """What a plugin hands back from `Viewer.edit`, ready for the terminal handoff.
+
+    Two halves on purpose. `handoff` is the child that wants the terminal - built
+    *before* the app suspends, so a missing `$EDITOR` or a read-only context is a
+    sentence on screen rather than a surprise afterwards (the `ec2.power()` rule,
+    and the handoff PoC's one real finding). `finish` runs after the editor exits
+    and returns what to tell the user - "saved 412 bytes", or "unchanged".
+    """
+
+    handoff: Any
+    finish: Callable[[], str]
+    label: str = "Edit"
 
 
 class ViewEditHost:
@@ -80,12 +99,55 @@ class ViewEditHost:
     # --- F4: edit ---------------------------------------------------------
 
     def action_edit(self) -> None:
-        """F4: edit the resource - or say why that is not possible yet."""
+        """F4: hand the resource to `$EDITOR` - or say why that is not possible.
+
+        The owner's question (2026-08-03) was whether read-only was in the way. It
+        was not: F4 was wired up for **nothing at all**. Now a plugin can claim a
+        type by giving its `Viewer` an `edit`, and everything unclaimed still
+        explains itself rather than pretending.
+
+        Every foreseeable complaint is raised **before** `app.suspend()`: read-only,
+        a binary body, a missing `$EDITOR`. After the suspend the app cannot show a
+        message any more - the handoff PoC's one real finding.
+        """
         ref = self.selected_ref()
         if ref is None:
             self._show_result("Edit", NOTHING)
             return
-        self._show_result(f"F4  Edit {ref.type_name}  {ref.identifier}", EDIT_HINT)
+
+        from clitka.core import viewer as vw
+
+        claimed = vw.first_for(ref)
+        if claimed is None or claimed.edit is None:
+            self._show_result(f"F4  Edit {ref.type_name}  {ref.identifier}", EDIT_HINT)
+            return
+
+        title = f"Edit  {ref.identifier}"
+        try:
+            session = claimed.edit(self.context, ref)
+        except Exception as exc:  # read-only, binary, no editor - all say why
+            self._show_result(title, f"[red]{exc}[/red]")
+            return
+
+        gone = session.handoff.unavailable()
+        if gone:
+            self._show_result(session.label, f"[red]{gone}[/red]")
+            return
+
+        # `ShellHost._shell_run` owns the suspend dance, and every screen with F4
+        # mixes it in as well - so the editor is launched exactly the way a shell is.
+        runner = getattr(self, "_shell_run", None)
+        if runner is None:  # pragma: no cover - a screen without ShellHost
+            self._show_result(session.label, "[red]this screen cannot open an editor[/red]")
+            return
+        runner(session.handoff)
+
+        try:
+            outcome = session.finish()
+        except Exception as exc:
+            self._show_result(session.label, f"[red]{exc}[/red]")
+            return
+        self._show_result(session.label, outcome)
 
     # --- shared -----------------------------------------------------------
 

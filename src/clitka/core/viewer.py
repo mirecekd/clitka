@@ -32,10 +32,24 @@ __all__ = ["Viewer", "available", "first_for", "registered"]
 
 @dataclass(frozen=True)
 class Viewer:
-    """How to render one resource in full, for F3.
+    """How to render one resource in full (F3) - and optionally edit it (F4).
 
     `view` returns text ready to display and may call AWS - `ViewEditHost` always
     runs it on a worker, exactly as it runs `GetResource` now.
+
+    `edit` is what F4 does, and it is deliberately part of *this* type rather than a
+    sixth hook (the owner's call, 2026-08-03): "how do I read this thing" and "how do
+    I change it" are two halves of the same answer, and anything editable is
+    certainly viewable.
+
+    It returns an **`EditSession`** - see `tui/viewedit.py`. Editing hands the whole
+    terminal to `$EDITOR`, so the session carries a `handoff.Handoff` to run plus a
+    `finish()` to call afterwards, and it is built *before* the app suspends: every
+    complaint a plugin can foresee (read-only, a binary body, no editor installed)
+    has to be a sentence on screen rather than a surprise after the editor closes.
+
+    A viewer that leaves `edit` None says "F4 does not apply here" - which is every
+    type Cloud Control owns, for now.
     """
 
     id: str
@@ -43,6 +57,12 @@ class Viewer:
     applies_to: Callable[[ResourceRef], bool] = lambda _ref: True
     label: str = ""
     """What the result screen is titled. Falls back to the identifier."""
+    edit: Callable[[Any, ResourceRef], Any] | None = None
+    """F4. Returns an `EditSession`; None means this type cannot be edited yet."""
+
+    @property
+    def editable(self) -> bool:
+        return self.edit is not None
 
 
 def available(viewers: Sequence[Viewer], ref: ResourceRef | None) -> list[Viewer]:
@@ -100,6 +120,11 @@ def _self_check() -> None:
     assert available([body], bucket) == []
     assert available([body], None) == []
     assert body.view(None, obj) == "the bytes of b/a.txt"
+
+    # F4 is opt-in: a viewer without `edit` says so, and one with it says so too.
+    assert not body.editable, "a viewer must not claim F4 by accident"
+    writable = Viewer("w", lambda _c, _r: "", edit=lambda _c, _r: "session")
+    assert writable.editable and writable.edit is not None
     print("[OK] viewer hook self-check passed")
 
 
