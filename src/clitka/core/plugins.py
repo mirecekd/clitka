@@ -21,6 +21,7 @@ BUILTIN_SERVICES: tuple[str, ...] = (
     "clitka.services.apigw",
     "clitka.services.ssm",
     "clitka.services.s3",
+    "clitka.services.dynamodb",
 )
 
 

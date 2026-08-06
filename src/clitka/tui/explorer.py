@@ -22,6 +22,7 @@ from clitka.core.context import Context
 from clitka.tui.actionhost import ActionHost
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import KeyBar
+from clitka.tui.qlconsole import QlConsole
 from clitka.tui.restypes import COMMON_TYPES, EXPLORER_HELP, MAX_ROWS, PAGE_ROWS
 from clitka.tui.shellhost import ShellHost
 from clitka.tui.status import StatusBar
@@ -31,7 +32,7 @@ from clitka.tui.viewedit import ViewEditHost
 __all__ = ["COMMON_TYPES", "MAX_ROWS", "PAGE_ROWS", "ExplorerScreen"]
 
 
-class ExplorerScreen(ViewEditHost, ShellHost, ActionHost, Screen[None]):
+class ExplorerScreen(ViewEditHost, ShellHost, QlConsole, ActionHost, Screen[None]):
     """One resource type at a time, in the generic table.
 
     `ActionHost` supplies the whole F9 flow; this screen only says what a row is
@@ -43,6 +44,8 @@ class ExplorerScreen(ViewEditHost, ShellHost, ActionHost, Screen[None]):
         Binding("f3", "view", "View", show=False),
         Binding("f4", "edit", "Edit", show=False),
         Binding("x", "connect", "Shell", show=False),
+        # Upper case alone - `q` is quit. See `treekeys.py` for why that matters.
+        Binding("Q", "query", "PartiQL", show=False),
         # P/R/L are the app's, but a Screen shadows the App's bindings, so they
         # have to be forwarded explicitly or they would be dead inside here.
         Binding("p,P", "app.switch_profile", "Profile", show=False),

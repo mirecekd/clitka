@@ -29,6 +29,7 @@ from clitka.tui.childmodel import ChildNode
 from clitka.tui.dropdown import TextDrop
 from clitka.tui.keybar import KeyBar
 from clitka.tui.preview import PreviewPane
+from clitka.tui.qlconsole import QlConsole
 from clitka.tui.restypes import TREE_HELP, TREE_TYPES
 from clitka.tui.shellhost import ShellHost
 from clitka.tui.status import StatusBar
@@ -50,6 +51,7 @@ class ResourceTree(
     TreeSelection,
     ViewEditHost,
     ShellHost,
+    QlConsole,
     ActionHost,
     BranchKeeper,
     ChildLoader,

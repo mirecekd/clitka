@@ -19,6 +19,7 @@ CLITKA - CLI ToolKit for AWS
 
   F4   edit the selected resource
   F5   refresh identity
+  Q    PartiQL console - on a DynamoDB table
   F10  quit
 
 
@@ -39,8 +40,9 @@ HELP = """\
   F5   refresh
 
   F9   actions for the selected resource (inside the explorer)
+  Q    PartiQL - type a statement against the selected DynamoDB table
   F10  quit
-  q    quit
+  q    quit  (lower case - upper case Q is the PartiQL console)
 
 Profile, region and the time window are letters (upper or lower case) so the
 function keys are free for what you do to a resource: F3 view, F4 edit,
@@ -74,6 +76,15 @@ keeps them. `:` adds any other type as a further branch.
 Resources are loaded page by page and appear as they arrive, so a long listing
 is browsable straight away. A resource is listed by its name where it has one
 (the `Name` tag on EC2), with the identifier beside it.
+
+
+PartiQL (Q)
+
+On a DynamoDB table, `Q` asks for a statement and shows the rows. The table comes
+pre-quoted in the offered examples, because PartiQL reads `FROM my-table` as a
+syntax error rather than a missing table. INSERT / UPDATE / DELETE are refused in
+read-only mode. `clitka dynamodb ql 'SELECT * FROM "t"'` is the same thing from a
+shell.
 
 
 Destructive actions always ask first, and "no" is the default answer. The status

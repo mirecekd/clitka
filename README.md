@@ -31,8 +31,8 @@ invoke, deploy, tail, exec, upload, execute.
 
 **Pre-alpha, under active development.** Auth, context, the TUI shell, the generic
 resource explorer, CloudWatch Logs, Lambda, ECR, EC2, ECS, API Gateway, Systems
-Manager and the S3 browser work; the remaining per-service modules are being built
-milestone by milestone.
+Manager, the S3 browser and the DynamoDB PartiQL console work; the remaining
+per-service modules are being built milestone by milestone.
 
 
 
@@ -227,6 +227,45 @@ the `aws s3` command for what the cursor is on instead, the same rule
 `lambda invoke` and `ecr login` follow. A keystroke that writes to your disk, or
 that cannot be un-run, waits for a screen that names the file first.
 
+## DynamoDB
+
+```bash
+clitka dynamodb ql 'SELECT * FROM "my-table"'               # PartiQL, rows out
+clitka dynamodb ql 'SELECT * FROM "my-table" WHERE pk = 1'
+clitka dynamodb ql 'SELECT * FROM "my-table"."my-index"'    # a GSI
+```
+
+**Press `Q` on a table in the explorer** and CLITKA asks for a statement, then shows
+the rows. The offered examples come with the table name **already quoted**, because
+PartiQL reads `FROM my-table` as a syntax error rather than a missing table, and
+almost every real table name has a hyphen in it.
+
+`Q` is upper case on purpose: lower-case `q` still quits.
+
+What `ql` adds over `aws dynamodb execute-statement`:
+
+- **The paging is done for you.** PartiQL pages with `NextToken` - a string, not the
+  `LastEvaluatedKey` dict that `scan` and `query` use - and the AWS CLI hands you the
+  token and lets you loop. Worth knowing why that matters: **a page can come back
+  empty and still have more pages**, which is measured behaviour for a filtered
+  statement, so "stop when a page is empty" reports nothing found on a table whose
+  matches all sit further along.
+- **Flat rows.** `{"pk": {"S": "x"}}` is shown as `pk: x`, all the way down, so a list
+  of strings prints as `["a", "b"]` rather than `[{"S": "a"}, {"S": "b"}]`.
+- **Numbers keep every digit.** They stay strings internally, because the usual route
+  through `Decimal` into JSON goes via `float`, and a 24-digit id comes out as
+  `1.2345678901234569e+23`. A DynamoDB number is arbitrary precision and CLITKA will
+  not quietly round your identifiers.
+- **A capped answer says so** and exits 1, the `clitka s3 ls` rule - a partial result
+  that looks complete is worse than an error.
+- **`INSERT` / `UPDATE` / `DELETE` are refused in read-only mode.** PartiQL is the one
+  place in CLITKA where a typed string can change data.
+
+A key-condition builder, item browsing and item editing are **not** here yet - this
+is the console only. Tables themselves come from the generic explorer, since
+`AWS::DynamoDB::Table` is a real Cloud Control type: the branch, `F3` and the preview
+pane all worked before this plugin existed.
+
 
 
 The TUI is split: the tree of resource types on the left, a preview of what you
@@ -319,6 +358,7 @@ Everything, in one place. Letter keys take either case.
 | `right` / `left` | open / close without moving off the node |
 | `tab` | move between the tree and the preview - the focused side is outlined |
 | `t` | on a log group: follow it live (CloudWatch live tail) |
+| `Q` | on a DynamoDB table: the PartiQL console - type a statement, see the rows. Upper case; lower-case `q` quits |
 | `F5` | collapse everything and forget it - also the retry after an error |
 
 ### Inside the preview pane
@@ -410,7 +450,7 @@ Roadmap, in order:
 | EC2 | instances, **SSM session**, port forwarding, start / stop / reboot |
 | ECR | repositories, images and tags, the untagged-image cleanup, `docker login` |
 | S3 | browse, upload/download with progress, edit an object in `$EDITOR` |
-| DynamoDB | tables, query/scan, item view and edit, PartiQL - **CLITKA's own addition**, the VS Code toolkit barely has this |
+| DynamoDB | **PartiQL console works**; tables come from the generic explorer. Query/scan builder, item view and edit still to come - **CLITKA's own addition**, the VS Code toolkit barely has this |
 | API Gateway | REST and HTTP APIs, routes, stages, **invoke through the real edge**, SigV4 signing |
 | CloudFormation | stacks, events with the failure reason highlighted, resources, template, drift |
 | Step Functions | state machines, start execution, execution history |

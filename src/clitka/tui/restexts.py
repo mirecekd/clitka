@@ -31,6 +31,8 @@ Doing things
   F3   view the highlighted resource in full (GetResource), as YAML
   F4   edit the highlighted resource
   x    open a shell on it - an EC2 instance or an ECS task
+  Q    PartiQL - on a DynamoDB table, type a statement and see the rows
+       (upper case; lower-case q quits)
   F5   reload the list
   F9   actions for the highlighted resource
   F10  quit
@@ -80,6 +82,10 @@ The preview
   page up/down     inside the preview: page the tab; home / end jump to the ends
 
   t                on a log group: follow it live (CloudWatch live tail)
+  Q                on a DynamoDB table: the PartiQL console - type a statement,
+                   see the rows. The examples come with the table already
+                   quoted, which is what PartiQL needs for a hyphenated name.
+                   Upper case: lower-case q still quits.
   w                how far back the Events tab looks: 1..0 for the presets,
                    n / y for 1 month / 1 year, c to type one (90m, 2h, 1mo)
 

@@ -50,6 +50,14 @@ TREE_BINDINGS = [
     Binding("f3", "view", "View", show=False),
     Binding("f4", "edit", "Edit", show=False),
     Binding("x", "connect", "Shell", show=False),
+    # `Q` is a screen key rather than an F9 action because a console is entirely
+    # typed input, and an `Action` cannot ask for any - the `t` precedent.
+    #
+    # UPPER CASE ONLY, and that is load-bearing: `q` is quit, and Textual reports
+    # the two separately (measured with `run_test` before choosing this key). The
+    # other letter keys are declared `p,P` / `c,C` precisely because they wanted
+    # both; this one must not, or the tree would swallow quit.
+    Binding("Q", "query", "PartiQL", show=False),
     # Forwarded to the App, which a Screen would otherwise shadow.
     Binding("p,P", "app.switch_profile", "Profile", show=False),
     Binding("r,R", "app.switch_region", "Region", show=False),
@@ -68,6 +76,10 @@ def _self_check() -> None:
     assert "enter" in keys
     # The `x` handoff has no menu-bar slot, so losing this binding is silent.
     assert "x" in keys
+    # `Q` opens the PartiQL console and must be upper case ALONE: `q` is quit, and
+    # `q,Q` here would swallow it inside the tree.
+    assert "Q" in keys, "the PartiQL console key"
+    assert "q" not in keys and "q,Q" not in keys, "q must stay quit"
     # Every app-wide letter key has to be forwarded, or a Screen swallows it.
     forwarded = {b.key: b.action for b in TREE_BINDINGS if b.action.startswith("app.")}
     assert set(forwarded) == {"p,P", "r,R", "w,W", "c,C"}, forwarded
